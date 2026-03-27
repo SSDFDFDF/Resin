@@ -11,6 +11,7 @@ type LeaseEventType int
 const (
 	LeaseCreate LeaseEventType = iota
 	LeaseTouch
+	LeaseUpdate
 	LeaseReplace
 	LeaseRemove
 	LeaseExpire

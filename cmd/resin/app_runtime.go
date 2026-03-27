@@ -156,7 +156,7 @@ func (a *resinApp) initTopologyRuntime(engine *state.StateEngine) (*netutil.Retr
 		// Keep this callback lightweight and non-blocking.
 		OnLeaseEvent: func(e routing.LeaseEvent) {
 			switch e.Type {
-			case routing.LeaseCreate, routing.LeaseTouch, routing.LeaseReplace:
+			case routing.LeaseCreate, routing.LeaseTouch, routing.LeaseUpdate, routing.LeaseReplace:
 				engine.MarkLease(e.PlatformID, e.Account)
 			case routing.LeaseRemove, routing.LeaseExpire:
 				engine.MarkLeaseDelete(e.PlatformID, e.Account)
@@ -190,6 +190,8 @@ func (a *resinApp) onLeaseEventForMetrics(e routing.LeaseEvent) {
 	switch e.Type {
 	case routing.LeaseCreate:
 		op = metrics.LeaseOpCreate
+	case routing.LeaseUpdate:
+		return
 	case routing.LeaseReplace:
 		op = metrics.LeaseOpReplace
 	case routing.LeaseRemove:

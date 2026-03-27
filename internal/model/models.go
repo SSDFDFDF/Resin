@@ -8,6 +8,9 @@ type Platform struct {
 	ID                               string `json:"id"`
 	Name                             string `json:"name"`
 	StickyTTLNs                      int64  `json:"sticky_ttl_ns"`
+	StickyLeaseMode                  string `json:"sticky_lease_mode"`
+	ManualUnavailableAction          string `json:"manual_unavailable_action"`
+	ManualUnavailableGraceNs         int64  `json:"manual_unavailable_grace_ns"`
 	RegexFilters                     []string
 	RegionFilters                    []string
 	RegionFilterInvert               bool
@@ -76,13 +79,14 @@ type NodeLatencyKey struct {
 
 // Lease represents a sticky routing lease.
 type Lease struct {
-	PlatformID     string `json:"platform_id"`
-	Account        string `json:"account"`
-	NodeHash       string `json:"node_hash"`
-	EgressIP       string `json:"egress_ip"`
-	CreatedAtNs    int64  `json:"created_at_ns"`
-	ExpiryNs       int64  `json:"expiry_ns"`
-	LastAccessedNs int64  `json:"last_accessed_ns"`
+	PlatformID         string `json:"platform_id"`
+	Account            string `json:"account"`
+	NodeHash           string `json:"node_hash"`
+	EgressIP           string `json:"egress_ip"`
+	CreatedAtNs        int64  `json:"created_at_ns"`
+	ExpiryNs           int64  `json:"expiry_ns"`
+	LastAccessedNs     int64  `json:"last_accessed_ns"`
+	UnavailableSinceNs int64  `json:"unavailable_since_ns"`
 }
 
 // LeaseKey is the composite primary key for leases.

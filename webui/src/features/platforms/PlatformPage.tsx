@@ -23,8 +23,12 @@ import {
   allocationPolicyLabel,
   emptyAccountBehaviorLabel,
   emptyAccountBehaviors,
+  manualUnavailableActionLabel,
+  manualUnavailableActions,
   missActionLabel,
   missActions,
+  stickyLeaseModeLabel,
+  stickyLeaseModes,
 } from "./constants";
 import {
   defaultPlatformFormValues,
@@ -80,6 +84,7 @@ export function PlatformPage() {
     defaultValues: defaultPlatformFormValues,
   });
   const createEmptyAccountBehavior = createForm.watch("reverse_proxy_empty_account_behavior");
+  const createStickyLeaseMode = createForm.watch("sticky_lease_mode");
 
   const createMutation = useMutation({
     mutationFn: createPlatform,
@@ -177,7 +182,9 @@ export function PlatformPage() {
           {platforms.map((platform) => {
             const regionCount = platform.region_filters.length;
             const regexCount = platform.regex_filters.length;
-            const stickyTTL = formatGoDuration(platform.sticky_ttl, t("默认"));
+            const stickySummary = platform.sticky_lease_mode === "MANUAL"
+              ? t("手动长租约")
+              : formatGoDuration(platform.sticky_ttl, t("默认"));
 
             return (
               <button
@@ -202,10 +209,14 @@ export function PlatformPage() {
                     <strong>{regexCount}</strong>
                   </span>
                   <span className="platform-fact">
-                    <span>{t("租约时长")}</span>
-                    <strong>{stickyTTL}</strong>
-                  </span>
-                </div>
+                  <span>{t("租约时长")}</span>
+                  <strong>{stickySummary}</strong>
+                </span>
+                <span className="platform-fact">
+                  <span>{t("租约模式")}</span>
+                  <strong>{t(stickyLeaseModeLabel[platform.sticky_lease_mode])}</strong>
+                </span>
+              </div>
                 <div className="platform-tile-foot">
                   <span className="platform-tile-meta">
                     {t("{{count}} 个可用节点", { count: platform.routable_node_count })}
@@ -262,6 +273,19 @@ export function PlatformPage() {
               </div>
 
               <div className="field-group">
+                <label className="field-label" htmlFor="create-sticky-mode">
+                  {t("租约模式")}
+                </label>
+                <Select id="create-sticky-mode" {...createForm.register("sticky_lease_mode")}>
+                  {stickyLeaseModes.map((item) => (
+                    <option key={item} value={item}>
+                      {t(stickyLeaseModeLabel[item])}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+
+              <div className="field-group">
                 <label className="field-label" htmlFor="create-miss-action">
                   {t("反向代理账号解析出错策略")}
                 </label>
@@ -298,6 +322,39 @@ export function PlatformPage() {
                     </option>
                   ))}
                 </Select>
+              </div>
+
+              <div
+                className={`account-headers-collapse ${createStickyLeaseMode === "MANUAL" ? "account-headers-collapse-open" : ""}`}
+                aria-hidden={createStickyLeaseMode !== "MANUAL"}
+              >
+                <div className="field-group">
+                  <label className="field-label" htmlFor="create-manual-unavailable-action">
+                    {t("长租约 IP 不可用时行为")}
+                  </label>
+                  <Select id="create-manual-unavailable-action" {...createForm.register("manual_unavailable_action")}>
+                    {manualUnavailableActions.map((item) => (
+                      <option key={item} value={item}>
+                        {t(manualUnavailableActionLabel[item])}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+
+                <div className="field-group">
+                  <label className="field-label" htmlFor="create-manual-unavailable-grace">
+                    {t("自动清理观察期")}
+                  </label>
+                  <Input
+                    id="create-manual-unavailable-grace"
+                    placeholder={t("例如 30s 或 2m")}
+                    invalid={Boolean(createForm.formState.errors.manual_unavailable_grace)}
+                    {...createForm.register("manual_unavailable_grace")}
+                  />
+                  {createForm.formState.errors.manual_unavailable_grace?.message ? (
+                    <p className="field-error">{t(createForm.formState.errors.manual_unavailable_grace.message)}</p>
+                  ) : null}
+                </div>
               </div>
 
               <div

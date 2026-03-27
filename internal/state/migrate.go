@@ -24,6 +24,7 @@ const (
 	stateVersionAddFixedAccountHeader   = 3
 	stateVersionNormalizeMissAction     = 4
 	stateVersionAddRegionFilterInvert   = 5
+	stateVersionAddStickyLeaseControls  = 6
 	stateLegacyBaselineVersion          = stateVersionAddFixedAccountHeader
 )
 
@@ -109,8 +110,23 @@ func prepareLegacyStateBaseline(db *sql.DB, driver migratedb.Driver) error {
 	if err != nil {
 		return err
 	}
+	hasStickyLeaseMode, err := hasTableColumn(db, "platforms", "sticky_lease_mode")
+	if err != nil {
+		return err
+	}
+	hasManualUnavailableAction, err := hasTableColumn(db, "platforms", "manual_unavailable_action")
+	if err != nil {
+		return err
+	}
+	hasManualUnavailableGrace, err := hasTableColumn(db, "platforms", "manual_unavailable_grace_ns")
+	if err != nil {
+		return err
+	}
 
 	switch {
+	case hasEmptyBehavior && hasFixedHeader && hasRegionFilterInvert &&
+		hasStickyLeaseMode && hasManualUnavailableAction && hasManualUnavailableGrace:
+		return setMigrationVersion(driver, stateVersionAddStickyLeaseControls)
 	case hasEmptyBehavior && hasFixedHeader && hasRegionFilterInvert:
 		return setMigrationVersion(driver, stateVersionAddRegionFilterInvert)
 	case hasEmptyBehavior && hasFixedHeader:

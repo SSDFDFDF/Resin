@@ -1,0 +1,2 @@
+ALTER TABLE leases
+ADD COLUMN unavailable_since_ns INTEGER NOT NULL DEFAULT 0;

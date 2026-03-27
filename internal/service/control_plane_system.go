@@ -93,6 +93,9 @@ var runtimeConfigAllowedFields = map[string]bool{
 var platformPatchAllowedFields = map[string]bool{
 	"name":                                 true,
 	"sticky_ttl":                           true,
+	"sticky_lease_mode":                    true,
+	"manual_unavailable_action":            true,
+	"manual_unavailable_grace":             true,
 	"regex_filters":                        true,
 	"region_filters":                       true,
 	"region_filter_invert":                 true,

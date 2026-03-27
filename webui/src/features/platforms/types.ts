@@ -1,11 +1,16 @@
 export type PlatformMissAction = "TREAT_AS_EMPTY" | "REJECT";
 export type PlatformEmptyAccountBehavior = "RANDOM" | "FIXED_HEADER" | "ACCOUNT_HEADER_RULE";
 export type PlatformAllocationPolicy = "BALANCED" | "PREFER_LOW_LATENCY" | "PREFER_IDLE_IP";
+export type PlatformStickyLeaseMode = "TTL" | "MANUAL";
+export type PlatformManualUnavailableAction = "HOLD" | "AUTO_CLEAN";
 
 export type Platform = {
   id: string;
   name: string;
   sticky_ttl: string;
+  sticky_lease_mode: PlatformStickyLeaseMode;
+  manual_unavailable_action: PlatformManualUnavailableAction;
+  manual_unavailable_grace: string;
   regex_filters: string[];
   region_filters: string[];
   region_filter_invert: boolean;
@@ -27,6 +32,9 @@ export type PageResponse<T> = {
 export type PlatformCreateInput = {
   name: string;
   sticky_ttl?: string;
+  sticky_lease_mode?: PlatformStickyLeaseMode;
+  manual_unavailable_action?: PlatformManualUnavailableAction;
+  manual_unavailable_grace?: string;
   regex_filters?: string[];
   region_filters?: string[];
   region_filter_invert?: boolean;
@@ -39,6 +47,9 @@ export type PlatformCreateInput = {
 export type PlatformUpdateInput = {
   name?: string;
   sticky_ttl?: string;
+  sticky_lease_mode?: PlatformStickyLeaseMode;
+  manual_unavailable_action?: PlatformManualUnavailableAction;
+  manual_unavailable_grace?: string;
   regex_filters?: string[];
   region_filters?: string[];
   region_filter_invert?: boolean;

@@ -5,18 +5,19 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/puzpuzpuz/xsync/v4"
 	"github.com/Resinat/Resin/internal/node"
+	"github.com/puzpuzpuz/xsync/v4"
 )
 
 // Lease represents a sticky routing lease.
 // It is a value type to avoid pointer aliasing races.
 type Lease struct {
-	NodeHash       node.Hash
-	EgressIP       netip.Addr
-	CreatedAtNs    int64
-	ExpiryNs       int64
-	LastAccessedNs int64
+	NodeHash           node.Hash
+	EgressIP           netip.Addr
+	CreatedAtNs        int64
+	ExpiryNs           int64
+	LastAccessedNs     int64
+	UnavailableSinceNs int64
 }
 
 // LeaseTable manages per-account sticky leases for a single platform.
@@ -143,5 +144,8 @@ func (s *IPLoadStats) Snapshot() map[netip.Addr]int64 {
 
 // IsExpired checks if a lease is expired relative to the given time.
 func (l Lease) IsExpired(now time.Time) bool {
+	if l.ExpiryNs <= 0 {
+		return false
+	}
 	return l.ExpiryNs < now.UnixNano()
 }

@@ -10,6 +10,7 @@ import (
 
 	"github.com/Resinat/Resin/internal/config"
 	"github.com/Resinat/Resin/internal/model"
+	"github.com/Resinat/Resin/internal/platform"
 )
 
 // helper: create a state.db in a temp dir, init DDL, return StateRepo + cleanup.
@@ -106,8 +107,8 @@ func TestMigrateStateDB_LegacyBaselineAdvancesToLatest(t *testing.T) {
 	if dirty {
 		t.Fatalf("schema_migrations dirty=true")
 	}
-	if version != stateVersionAddRegionFilterInvert {
-		t.Fatalf("schema_migrations version: got %d, want %d", version, stateVersionAddRegionFilterInvert)
+	if version != stateVersionAddStickyLeaseControls {
+		t.Fatalf("schema_migrations version: got %d, want %d", version, stateVersionAddStickyLeaseControls)
 	}
 }
 
@@ -178,8 +179,8 @@ func TestMigrateStateDB_NormalizesLegacyRandomMissAction(t *testing.T) {
 	if dirty {
 		t.Fatalf("schema_migrations dirty=true")
 	}
-	if version != stateVersionAddRegionFilterInvert {
-		t.Fatalf("schema_migrations version: got %d, want %d", version, stateVersionAddRegionFilterInvert)
+	if version != stateVersionAddStickyLeaseControls {
+		t.Fatalf("schema_migrations version: got %d, want %d", version, stateVersionAddStickyLeaseControls)
 	}
 }
 
@@ -239,7 +240,10 @@ func TestStateRepo_Platforms_CRUD(t *testing.T) {
 
 	p := model.Platform{
 		ID: "plat-1", Name: "Default", StickyTTLNs: 1000,
-		RegexFilters: []string{}, RegionFilters: []string{}, RegionFilterInvert: true,
+		StickyLeaseMode:          string(platform.StickyLeaseModeManual),
+		ManualUnavailableAction:  string(platform.ManualUnavailableActionAutoClean),
+		ManualUnavailableGraceNs: int64(15 * time.Second),
+		RegexFilters:             []string{}, RegionFilters: []string{}, RegionFilterInvert: true,
 		ReverseProxyMissAction: "TREAT_AS_EMPTY", AllocationPolicy: "BALANCED",
 		UpdatedAtNs: now,
 	}
@@ -263,6 +267,19 @@ func TestStateRepo_Platforms_CRUD(t *testing.T) {
 	}
 	if !got.RegionFilterInvert {
 		t.Fatal("expected region_filter_invert to round-trip as true")
+	}
+	if got.StickyLeaseMode != string(platform.StickyLeaseModeManual) {
+		t.Fatalf("unexpected sticky_lease_mode: got %q, want %q", got.StickyLeaseMode, platform.StickyLeaseModeManual)
+	}
+	if got.ManualUnavailableAction != string(platform.ManualUnavailableActionAutoClean) {
+		t.Fatalf(
+			"unexpected manual_unavailable_action: got %q, want %q",
+			got.ManualUnavailableAction,
+			platform.ManualUnavailableActionAutoClean,
+		)
+	}
+	if got.ManualUnavailableGraceNs != int64(15*time.Second) {
+		t.Fatalf("unexpected manual_unavailable_grace_ns: got %d, want %d", got.ManualUnavailableGraceNs, int64(15*time.Second))
 	}
 
 	// List.

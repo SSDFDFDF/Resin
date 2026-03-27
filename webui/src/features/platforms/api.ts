@@ -6,6 +6,9 @@ const basePath = "/api/v1/platforms";
 type ApiPlatform = Omit<Platform, "regex_filters" | "region_filters"> & {
   regex_filters?: string[] | null;
   region_filters?: string[] | null;
+  sticky_lease_mode?: Platform["sticky_lease_mode"] | null;
+  manual_unavailable_action?: Platform["manual_unavailable_action"] | null;
+  manual_unavailable_grace?: string | null;
   region_filter_invert?: boolean | null;
   routable_node_count?: number | null;
   reverse_proxy_miss_action?: Platform["reverse_proxy_miss_action"] | null;
@@ -24,6 +27,9 @@ function normalizePlatform(raw: ApiPlatform): Platform {
   return {
     ...raw,
     reverse_proxy_miss_action: parseMissAction(raw.reverse_proxy_miss_action),
+    sticky_lease_mode: raw.sticky_lease_mode === "MANUAL" ? "MANUAL" : "TTL",
+    manual_unavailable_action: raw.manual_unavailable_action === "AUTO_CLEAN" ? "AUTO_CLEAN" : "HOLD",
+    manual_unavailable_grace: typeof raw.manual_unavailable_grace === "string" ? raw.manual_unavailable_grace : "0s",
     regex_filters: Array.isArray(raw.regex_filters) ? raw.regex_filters : [],
     region_filters: Array.isArray(raw.region_filters) ? raw.region_filters : [],
     region_filter_invert: raw.region_filter_invert === true,

@@ -22,8 +22,12 @@ import {
   allocationPolicyLabel,
   emptyAccountBehaviorLabel,
   emptyAccountBehaviors,
+  manualUnavailableActionLabel,
+  manualUnavailableActions,
   missActionLabel,
   missActions,
+  stickyLeaseModeLabel,
+  stickyLeaseModes,
 } from "./constants";
 import {
   defaultPlatformFormValues,
@@ -74,6 +78,7 @@ export function PlatformDetailPage() {
     defaultValues: defaultPlatformFormValues,
   });
   const detailEmptyAccountBehavior = editForm.watch("reverse_proxy_empty_account_behavior");
+  const detailStickyLeaseMode = editForm.watch("sticky_lease_mode");
 
   useEffect(() => {
     if (!platform) {
@@ -189,6 +194,11 @@ export function PlatformDetailPage() {
   };
 
   const stickyTTL = platform ? formatGoDuration(platform.sticky_ttl, t("默认")) : t("默认");
+  const stickySummary = platform
+    ? platform.sticky_lease_mode === "MANUAL"
+      ? t("手动长租约")
+      : stickyTTL
+    : t("默认");
   const regionCount = platform?.region_filters.length ?? 0;
   const regexCount = platform?.regex_filters.length ?? 0;
   const deleteDisabled = !platform || platform.id === ZERO_UUID || deleteMutation.isPending;
@@ -261,7 +271,11 @@ export function PlatformDetailPage() {
                 </span>
                 <span className="platform-fact">
                   <span>{t("租约时长")}</span>
-                  <strong>{stickyTTL}</strong>
+                  <strong>{stickySummary}</strong>
+                </span>
+                <span className="platform-fact">
+                  <span>{t("租约模式")}</span>
+                  <strong>{t(stickyLeaseModeLabel[platform.sticky_lease_mode])}</strong>
                 </span>
                 <span className="platform-fact">
                   <span>{t("策略")}</span>
@@ -275,6 +289,18 @@ export function PlatformDetailPage() {
                   <span>{t("空账号行为")}</span>
                   <strong>{t(emptyAccountBehaviorLabel[platform.reverse_proxy_empty_account_behavior])}</strong>
                 </span>
+                {platform.sticky_lease_mode === "MANUAL" ? (
+                  <span className="platform-fact">
+                    <span>{t("IP 不可用时")}</span>
+                    <strong>{t(manualUnavailableActionLabel[platform.manual_unavailable_action])}</strong>
+                  </span>
+                ) : null}
+                {platform.sticky_lease_mode === "MANUAL" ? (
+                  <span className="platform-fact">
+                    <span>{t("观察期")}</span>
+                    <strong>{formatGoDuration(platform.manual_unavailable_grace, "0s")}</strong>
+                  </span>
+                ) : null}
               </div>
             </div>
           </Card>
@@ -351,6 +377,19 @@ export function PlatformDetailPage() {
                   </div>
 
                   <div className="field-group">
+                    <label className="field-label" htmlFor="detail-edit-sticky-mode">
+                      {t("租约模式")}
+                    </label>
+                    <Select id="detail-edit-sticky-mode" {...editForm.register("sticky_lease_mode")}>
+                      {stickyLeaseModes.map((item) => (
+                        <option key={item} value={item}>
+                          {t(stickyLeaseModeLabel[item])}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+
+                  <div className="field-group">
                     <label className="field-label" htmlFor="detail-edit-miss-action">
                       {t("反向代理账号解析出错策略")}
                     </label>
@@ -387,6 +426,39 @@ export function PlatformDetailPage() {
                         </option>
                       ))}
                     </Select>
+                  </div>
+
+                  <div
+                    className={`account-headers-collapse ${detailStickyLeaseMode === "MANUAL" ? "account-headers-collapse-open" : ""}`}
+                    aria-hidden={detailStickyLeaseMode !== "MANUAL"}
+                  >
+                    <div className="field-group">
+                      <label className="field-label" htmlFor="detail-edit-manual-unavailable-action">
+                        {t("长租约 IP 不可用时行为")}
+                      </label>
+                      <Select id="detail-edit-manual-unavailable-action" {...editForm.register("manual_unavailable_action")}>
+                        {manualUnavailableActions.map((item) => (
+                          <option key={item} value={item}>
+                            {t(manualUnavailableActionLabel[item])}
+                          </option>
+                        ))}
+                      </Select>
+                    </div>
+
+                    <div className="field-group">
+                      <label className="field-label" htmlFor="detail-edit-manual-unavailable-grace">
+                        {t("自动清理观察期")}
+                      </label>
+                      <Input
+                        id="detail-edit-manual-unavailable-grace"
+                        placeholder={t("例如 30s 或 2m")}
+                        invalid={Boolean(editForm.formState.errors.manual_unavailable_grace)}
+                        {...editForm.register("manual_unavailable_grace")}
+                      />
+                      {editForm.formState.errors.manual_unavailable_grace?.message ? (
+                        <p className="field-error">{t(editForm.formState.errors.manual_unavailable_grace.message)}</p>
+                      ) : null}
+                    </div>
                   </div>
 
                   <div

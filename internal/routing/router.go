@@ -187,6 +187,41 @@ func (r *Router) decideStickyLease(
 	current Lease,
 	loaded bool,
 ) (Lease, xsync.ComputeOp, RouteResult, error) {
+	if effectiveStickyLeaseMode(plat) == platform.StickyLeaseModeManual {
+		return r.decideManualStickyLease(
+			plat,
+			state,
+			account,
+			targetDomain,
+			now,
+			nowNs,
+			current,
+			loaded,
+		)
+	}
+
+	return r.decideTimedStickyLease(
+		plat,
+		state,
+		account,
+		targetDomain,
+		now,
+		nowNs,
+		current,
+		loaded,
+	)
+}
+
+func (r *Router) decideTimedStickyLease(
+	plat *platform.Platform,
+	state *PlatformRoutingState,
+	account string,
+	targetDomain string,
+	now time.Time,
+	nowNs int64,
+	current Lease,
+	loaded bool,
+) (Lease, xsync.ComputeOp, RouteResult, error) {
 	hadPreviousLease := loaded
 	invalidation := leaseInvalidationNone
 
@@ -215,6 +250,85 @@ func (r *Router) decideStickyLease(
 		current,
 		hadPreviousLease,
 		invalidation,
+	)
+}
+
+func (r *Router) decideManualStickyLease(
+	plat *platform.Platform,
+	state *PlatformRoutingState,
+	account string,
+	targetDomain string,
+	now time.Time,
+	nowNs int64,
+	current Lease,
+	loaded bool,
+) (Lease, xsync.ComputeOp, RouteResult, error) {
+	if loaded {
+		if newLease, hitResult, ok := r.tryLeaseHit(plat, account, current, nowNs); ok {
+			newLease.UnavailableSinceNs = 0
+			return newLease, xsync.UpdateOp, hitResult, nil
+		}
+		if newLease, rotatedResult, ok := r.tryLeaseSameIPRotation(plat, account, current, targetDomain, nowNs); ok {
+			newLease.UnavailableSinceNs = 0
+			return newLease, xsync.UpdateOp, rotatedResult, nil
+		}
+
+		action := effectiveManualUnavailableAction(plat)
+		if action == platform.ManualUnavailableActionAutoClean {
+			graceNs := effectiveManualUnavailableGraceNs(plat)
+			if current.UnavailableSinceNs <= 0 && graceNs > 0 {
+				newLease := current
+				newLease.UnavailableSinceNs = nowNs
+				r.emitLeaseEvent(LeaseEvent{
+					Type:       LeaseUpdate,
+					PlatformID: plat.ID,
+					Account:    account,
+					NodeHash:   current.NodeHash,
+					EgressIP:   current.EgressIP,
+				})
+				return newLease, xsync.UpdateOp, RouteResult{}, ErrNoAvailableNodes
+			}
+			if current.UnavailableSinceNs > 0 && nowNs-current.UnavailableSinceNs < graceNs {
+				return current, xsync.CancelOp, RouteResult{}, ErrNoAvailableNodes
+			}
+			return r.createOrAbortStickyLease(
+				plat,
+				state,
+				account,
+				targetDomain,
+				now,
+				nowNs,
+				current,
+				true,
+				leaseInvalidationRemove,
+			)
+		}
+
+		if current.UnavailableSinceNs > 0 {
+			return current, xsync.CancelOp, RouteResult{}, ErrNoAvailableNodes
+		}
+		newLease := current
+		newLease.UnavailableSinceNs = nowNs
+		r.emitLeaseEvent(LeaseEvent{
+			Type:       LeaseUpdate,
+			PlatformID: plat.ID,
+			Account:    account,
+			NodeHash:   current.NodeHash,
+			EgressIP:   current.EgressIP,
+		})
+		return newLease, xsync.UpdateOp, RouteResult{}, ErrNoAvailableNodes
+	}
+
+	return r.createOrAbortStickyLease(
+		plat,
+		state,
+		account,
+		targetDomain,
+		now,
+		nowNs,
+		current,
+		false,
+		leaseInvalidationNone,
 	)
 }
 
@@ -322,17 +436,20 @@ func (r *Router) createLease(
 	if err != nil {
 		return Lease{}, RouteResult{}, err
 	}
-	ttl := plat.StickyTTLNs
-	if ttl <= 0 {
-		ttl = int64(24 * time.Hour) // Default safeguard
-	}
-
 	lease := Lease{
 		NodeHash:       h,
 		EgressIP:       entry.GetEgressIP(),
 		CreatedAtNs:    nowNs,
-		ExpiryNs:       now.Add(time.Duration(ttl)).UnixNano(),
 		LastAccessedNs: nowNs,
+	}
+	if effectiveStickyLeaseMode(plat) == platform.StickyLeaseModeManual {
+		lease.ExpiryNs = 0
+	} else {
+		ttl := plat.StickyTTLNs
+		if ttl <= 0 {
+			ttl = int64(24 * time.Hour) // Default safeguard
+		}
+		lease.ExpiryNs = now.Add(time.Duration(ttl)).UnixNano()
 	}
 	return lease, RouteResult{
 		NodeHash:     lease.NodeHash,
@@ -386,6 +503,27 @@ func (r *Router) emitLeaseEvent(event LeaseEvent) {
 	if r.onLeaseEvent != nil {
 		r.onLeaseEvent(event)
 	}
+}
+
+func effectiveStickyLeaseMode(plat *platform.Platform) platform.StickyLeaseMode {
+	if plat == nil {
+		return platform.StickyLeaseModeTTL
+	}
+	return platform.NormalizeStickyLeaseMode(plat.StickyLeaseMode)
+}
+
+func effectiveManualUnavailableAction(plat *platform.Platform) platform.ManualUnavailableAction {
+	if plat == nil {
+		return platform.ManualUnavailableActionHold
+	}
+	return platform.NormalizeManualUnavailableAction(plat.ManualUnavailableAction)
+}
+
+func effectiveManualUnavailableGraceNs(plat *platform.Platform) int64 {
+	if plat == nil || plat.ManualUnavailableGraceNs < 0 {
+		return 0
+	}
+	return plat.ManualUnavailableGraceNs
 }
 
 func (r *Router) selectLiveRandomRoute(
@@ -477,13 +615,14 @@ func (r *Router) ReadLease(key model.LeaseKey) *model.Lease {
 		return nil
 	}
 	return &model.Lease{
-		PlatformID:     key.PlatformID,
-		Account:        key.Account,
-		NodeHash:       lease.NodeHash.Hex(),
-		EgressIP:       lease.EgressIP.String(),
-		CreatedAtNs:    lease.CreatedAtNs,
-		ExpiryNs:       lease.ExpiryNs,
-		LastAccessedNs: lease.LastAccessedNs,
+		PlatformID:         key.PlatformID,
+		Account:            key.Account,
+		NodeHash:           lease.NodeHash.Hex(),
+		EgressIP:           lease.EgressIP.String(),
+		CreatedAtNs:        lease.CreatedAtNs,
+		ExpiryNs:           lease.ExpiryNs,
+		LastAccessedNs:     lease.LastAccessedNs,
+		UnavailableSinceNs: lease.UnavailableSinceNs,
 	}
 }
 
@@ -510,11 +649,12 @@ func (r *Router) UpsertLease(ml model.Lease) error {
 
 	state := r.ensurePlatformState(platformID)
 	lease := Lease{
-		NodeHash:       h,
-		EgressIP:       ip,
-		CreatedAtNs:    ml.CreatedAtNs,
-		ExpiryNs:       ml.ExpiryNs,
-		LastAccessedNs: ml.LastAccessedNs,
+		NodeHash:           h,
+		EgressIP:           ip,
+		CreatedAtNs:        ml.CreatedAtNs,
+		ExpiryNs:           ml.ExpiryNs,
+		LastAccessedNs:     ml.LastAccessedNs,
+		UnavailableSinceNs: max(ml.UnavailableSinceNs, 0),
 	}
 
 	eventType := LeaseCreate
@@ -564,11 +704,12 @@ func (r *Router) RestoreLeases(leases []model.Lease) {
 		})
 
 		l := Lease{
-			NodeHash:       h,
-			EgressIP:       ip,
-			CreatedAtNs:    ml.CreatedAtNs,
-			ExpiryNs:       ml.ExpiryNs,
-			LastAccessedNs: ml.LastAccessedNs,
+			NodeHash:           h,
+			EgressIP:           ip,
+			CreatedAtNs:        ml.CreatedAtNs,
+			ExpiryNs:           ml.ExpiryNs,
+			LastAccessedNs:     ml.LastAccessedNs,
+			UnavailableSinceNs: max(ml.UnavailableSinceNs, 0),
 		}
 		// Directly insert into table and stats
 		state.Leases.CreateLease(ml.Account, l)

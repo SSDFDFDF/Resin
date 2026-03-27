@@ -44,6 +44,9 @@ func NewConfiguredPlatform(
 	regexFilters []*regexp.Regexp,
 	regionFilters []string,
 	stickyTTLNs int64,
+	stickyLeaseMode string,
+	manualUnavailableAction string,
+	manualUnavailableGraceNs int64,
 	missAction string,
 	emptyAccountBehavior string,
 	fixedAccountHeader string,
@@ -57,6 +60,12 @@ func NewConfiguredPlatform(
 	}
 	plat := NewPlatform(id, name, regexFilters, regionFilters, regionFilterInvert...)
 	plat.StickyTTLNs = stickyTTLNs
+	plat.StickyLeaseMode = string(NormalizeStickyLeaseMode(stickyLeaseMode))
+	plat.ManualUnavailableAction = string(NormalizeManualUnavailableAction(manualUnavailableAction))
+	if manualUnavailableGraceNs < 0 {
+		manualUnavailableGraceNs = 0
+	}
+	plat.ManualUnavailableGraceNs = manualUnavailableGraceNs
 	plat.ReverseProxyMissAction = missAction
 	plat.ReverseProxyEmptyAccountBehavior = emptyAccountBehavior
 	plat.ReverseProxyFixedAccountHeader = normalizedFixedHeaders
@@ -87,6 +96,12 @@ func BuildFromModel(mp model.Platform) (*Platform, error) {
 	if !ReverseProxyEmptyAccountBehavior(emptyAccountBehavior).IsValid() {
 		emptyAccountBehavior = string(ReverseProxyEmptyAccountBehaviorRandom)
 	}
+	stickyLeaseMode := string(NormalizeStickyLeaseMode(mp.StickyLeaseMode))
+	manualUnavailableAction := string(NormalizeManualUnavailableAction(mp.ManualUnavailableAction))
+	manualUnavailableGraceNs := mp.ManualUnavailableGraceNs
+	if manualUnavailableGraceNs < 0 {
+		manualUnavailableGraceNs = 0
+	}
 	missAction := NormalizeReverseProxyMissAction(mp.ReverseProxyMissAction)
 	if missAction == "" {
 		return nil, fmt.Errorf(
@@ -113,6 +128,9 @@ func BuildFromModel(mp model.Platform) (*Platform, error) {
 		regexFilters,
 		append([]string(nil), mp.RegionFilters...),
 		mp.StickyTTLNs,
+		stickyLeaseMode,
+		manualUnavailableAction,
+		manualUnavailableGraceNs,
 		string(missAction),
 		emptyAccountBehavior,
 		fixedHeader,

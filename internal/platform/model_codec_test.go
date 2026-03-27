@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Resinat/Resin/internal/model"
 )
@@ -13,6 +14,9 @@ func TestBuildFromModel_Success(t *testing.T) {
 		ID:                               "plat-1",
 		Name:                             "Platform-1",
 		StickyTTLNs:                      3600,
+		StickyLeaseMode:                  "MANUAL",
+		ManualUnavailableAction:          "AUTO_CLEAN",
+		ManualUnavailableGraceNs:         int64(45 * time.Second),
 		RegexFilters:                     []string{`^us-.*$`},
 		RegionFilters:                    []string{"us", "jp"},
 		RegionFilterInvert:               true,
@@ -32,6 +36,19 @@ func TestBuildFromModel_Success(t *testing.T) {
 	}
 	if plat.StickyTTLNs != mp.StickyTTLNs {
 		t.Fatalf("sticky ttl mismatch: got %d want %d", plat.StickyTTLNs, mp.StickyTTLNs)
+	}
+	if plat.StickyLeaseMode != string(StickyLeaseModeManual) {
+		t.Fatalf("sticky lease mode mismatch: got %q want %q", plat.StickyLeaseMode, StickyLeaseModeManual)
+	}
+	if plat.ManualUnavailableAction != string(ManualUnavailableActionAutoClean) {
+		t.Fatalf(
+			"manual unavailable action mismatch: got %q want %q",
+			plat.ManualUnavailableAction,
+			ManualUnavailableActionAutoClean,
+		)
+	}
+	if plat.ManualUnavailableGraceNs != int64(45*time.Second) {
+		t.Fatalf("manual unavailable grace mismatch: got %d want %d", plat.ManualUnavailableGraceNs, int64(45*time.Second))
 	}
 	if plat.ReverseProxyMissAction != mp.ReverseProxyMissAction {
 		t.Fatalf("miss action mismatch: got %q want %q", plat.ReverseProxyMissAction, mp.ReverseProxyMissAction)

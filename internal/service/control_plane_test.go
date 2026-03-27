@@ -610,6 +610,101 @@ func TestCreatePlatform_RegionFilterInvert(t *testing.T) {
 	}
 }
 
+func TestCreatePlatform_ManualStickyConfigRoundTrips(t *testing.T) {
+	dir := t.TempDir()
+	engine, closer, err := state.PersistenceBootstrap(
+		filepath.Join(dir, "state"),
+		filepath.Join(dir, "cache"),
+	)
+	if err != nil {
+		t.Fatalf("PersistenceBootstrap: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = closer.Close()
+	})
+
+	subMgr := topology.NewSubscriptionManager()
+	pool := topology.NewGlobalNodePool(topology.PoolConfig{
+		SubLookup:              subMgr.Lookup,
+		GeoLookup:              func(netip.Addr) string { return "us" },
+		MaxLatencyTableEntries: 16,
+		MaxConsecutiveFailures: func() int { return 3 },
+		LatencyDecayWindow:     func() time.Duration { return 10 * time.Minute },
+	})
+
+	cp := &ControlPlaneService{
+		Engine: engine,
+		Pool:   pool,
+		SubMgr: subMgr,
+		EnvCfg: &config.EnvConfig{
+			DefaultPlatformStickyTTL:              30 * time.Minute,
+			DefaultPlatformRegexFilters:           []string{},
+			DefaultPlatformRegionFilters:          []string{},
+			DefaultPlatformReverseProxyMissAction: "TREAT_AS_EMPTY",
+			DefaultPlatformAllocationPolicy:       "BALANCED",
+		},
+	}
+
+	name := "manual-platform"
+	mode := string(platform.StickyLeaseModeManual)
+	action := string(platform.ManualUnavailableActionAutoClean)
+	grace := (45 * time.Second).String()
+	created, err := cp.CreatePlatform(CreatePlatformRequest{
+		Name:                    &name,
+		StickyLeaseMode:         &mode,
+		ManualUnavailableAction: &action,
+		ManualUnavailableGrace:  &grace,
+	})
+	if err != nil {
+		t.Fatalf("CreatePlatform: %v", err)
+	}
+	if created.StickyLeaseMode != mode {
+		t.Fatalf("response sticky_lease_mode: got %q want %q", created.StickyLeaseMode, mode)
+	}
+	if created.ManualUnavailableAction != action {
+		t.Fatalf("response manual_unavailable_action: got %q want %q", created.ManualUnavailableAction, action)
+	}
+	if created.ManualUnavailableGrace != grace {
+		t.Fatalf("response manual_unavailable_grace: got %q want %q", created.ManualUnavailableGrace, grace)
+	}
+
+	stored, err := engine.GetPlatform(created.ID)
+	if err != nil {
+		t.Fatalf("GetPlatform: %v", err)
+	}
+	if stored.StickyLeaseMode != mode {
+		t.Fatalf("stored sticky_lease_mode: got %q want %q", stored.StickyLeaseMode, mode)
+	}
+	if stored.ManualUnavailableAction != action {
+		t.Fatalf("stored manual_unavailable_action: got %q want %q", stored.ManualUnavailableAction, action)
+	}
+	if stored.ManualUnavailableGraceNs != int64(45*time.Second) {
+		t.Fatalf(
+			"stored manual_unavailable_grace_ns: got %d want %d",
+			stored.ManualUnavailableGraceNs,
+			int64(45*time.Second),
+		)
+	}
+
+	plat, ok := pool.GetPlatform(created.ID)
+	if !ok {
+		t.Fatalf("platform %s was not registered in pool", created.ID)
+	}
+	if plat.StickyLeaseMode != mode {
+		t.Fatalf("runtime sticky_lease_mode: got %q want %q", plat.StickyLeaseMode, mode)
+	}
+	if plat.ManualUnavailableAction != action {
+		t.Fatalf("runtime manual_unavailable_action: got %q want %q", plat.ManualUnavailableAction, action)
+	}
+	if plat.ManualUnavailableGraceNs != int64(45*time.Second) {
+		t.Fatalf(
+			"runtime manual_unavailable_grace_ns: got %d want %d",
+			plat.ManualUnavailableGraceNs,
+			int64(45*time.Second),
+		)
+	}
+}
+
 func TestDeleteSubscription_PersistFailureDoesNotMutateRuntimeState(t *testing.T) {
 	dir := t.TempDir()
 	engine, closer, err := state.PersistenceBootstrap(
@@ -950,6 +1045,9 @@ func TestDeletePlatform_DoesNotDecodeCorruptPersistedFiltersJSON(t *testing.T) {
 		nil,
 		nil,
 		platformRow.StickyTTLNs,
+		string(platform.StickyLeaseModeTTL),
+		string(platform.ManualUnavailableActionHold),
+		0,
 		platformRow.ReverseProxyMissAction,
 		string(platform.ReverseProxyEmptyAccountBehaviorAccountHeaderRule),
 		"",
@@ -1012,6 +1110,9 @@ func TestResetPlatformToDefault_SupportsBuiltInDefaultPlatform(t *testing.T) {
 		nil,
 		nil,
 		defaultRow.StickyTTLNs,
+		string(platform.StickyLeaseModeTTL),
+		string(platform.ManualUnavailableActionHold),
+		0,
 		defaultRow.ReverseProxyMissAction,
 		string(platform.ReverseProxyEmptyAccountBehaviorAccountHeaderRule),
 		"",
@@ -1163,6 +1264,9 @@ func TestResetPlatformToDefault_DoesNotDecodeCorruptPersistedFiltersJSON(t *test
 		nil,
 		nil,
 		platformRow.StickyTTLNs,
+		string(platform.StickyLeaseModeTTL),
+		string(platform.ManualUnavailableActionHold),
+		0,
 		platformRow.ReverseProxyMissAction,
 		string(platform.ReverseProxyEmptyAccountBehaviorAccountHeaderRule),
 		"",

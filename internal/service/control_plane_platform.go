@@ -25,6 +25,9 @@ type PlatformResponse struct {
 	ID                               string   `json:"id"`
 	Name                             string   `json:"name"`
 	StickyTTL                        string   `json:"sticky_ttl"`
+	StickyLeaseMode                  string   `json:"sticky_lease_mode"`
+	ManualUnavailableAction          string   `json:"manual_unavailable_action"`
+	ManualUnavailableGrace           string   `json:"manual_unavailable_grace"`
 	RegexFilters                     []string `json:"regex_filters"`
 	RegionFilters                    []string `json:"region_filters"`
 	RegionFilterInvert               bool     `json:"region_filter_invert"`
@@ -43,6 +46,9 @@ func platformToResponse(p model.Platform) PlatformResponse {
 		ID:                               p.ID,
 		Name:                             p.Name,
 		StickyTTL:                        time.Duration(p.StickyTTLNs).String(),
+		StickyLeaseMode:                  normalizeStickyLeaseMode(p.StickyLeaseMode),
+		ManualUnavailableAction:          normalizeManualUnavailableAction(p.ManualUnavailableAction),
+		ManualUnavailableGrace:           time.Duration(normalizeManualUnavailableGraceNs(p.ManualUnavailableGraceNs)).String(),
 		RegexFilters:                     append([]string(nil), p.RegexFilters...),
 		RegionFilters:                    append([]string(nil), p.RegionFilters...),
 		RegionFilterInvert:               p.RegionFilterInvert,
@@ -70,6 +76,9 @@ func (s *ControlPlaneService) withRoutableNodeCount(resp PlatformResponse) Platf
 type platformConfig struct {
 	Name                             string
 	StickyTTLNs                      int64
+	StickyLeaseMode                  string
+	ManualUnavailableAction          string
+	ManualUnavailableGraceNs         int64
 	RegexFilters                     []string
 	RegionFilters                    []string
 	RegionFilterInvert               bool
@@ -94,14 +103,32 @@ func normalizePlatformEmptyAccountBehavior(raw string) string {
 	return string(platform.ReverseProxyEmptyAccountBehaviorRandom)
 }
 
+func normalizeStickyLeaseMode(raw string) string {
+	return string(platform.NormalizeStickyLeaseMode(raw))
+}
+
+func normalizeManualUnavailableAction(raw string) string {
+	return string(platform.NormalizeManualUnavailableAction(raw))
+}
+
+func normalizeManualUnavailableGraceNs(raw int64) int64 {
+	if raw < 0 {
+		return 0
+	}
+	return raw
+}
+
 func (s *ControlPlaneService) defaultPlatformConfig(name string) platformConfig {
 	return platformConfig{
-		Name:                   name,
-		StickyTTLNs:            int64(s.EnvCfg.DefaultPlatformStickyTTL),
-		RegexFilters:           append([]string(nil), s.EnvCfg.DefaultPlatformRegexFilters...),
-		RegionFilters:          append([]string(nil), s.EnvCfg.DefaultPlatformRegionFilters...),
-		RegionFilterInvert:     s.EnvCfg.DefaultPlatformRegionFilterInvert,
-		ReverseProxyMissAction: s.EnvCfg.DefaultPlatformReverseProxyMissAction,
+		Name:                     name,
+		StickyTTLNs:              int64(s.EnvCfg.DefaultPlatformStickyTTL),
+		StickyLeaseMode:          string(platform.StickyLeaseModeTTL),
+		ManualUnavailableAction:  string(platform.ManualUnavailableActionHold),
+		ManualUnavailableGraceNs: 0,
+		RegexFilters:             append([]string(nil), s.EnvCfg.DefaultPlatformRegexFilters...),
+		RegionFilters:            append([]string(nil), s.EnvCfg.DefaultPlatformRegionFilters...),
+		RegionFilterInvert:       s.EnvCfg.DefaultPlatformRegionFilterInvert,
+		ReverseProxyMissAction:   s.EnvCfg.DefaultPlatformReverseProxyMissAction,
 		ReverseProxyEmptyAccountBehavior: normalizePlatformEmptyAccountBehavior(
 			s.EnvCfg.DefaultPlatformReverseProxyEmptyAccountBehavior,
 		),
@@ -116,6 +143,9 @@ func platformConfigFromModel(mp model.Platform) platformConfig {
 	return platformConfig{
 		Name:                             mp.Name,
 		StickyTTLNs:                      mp.StickyTTLNs,
+		StickyLeaseMode:                  normalizeStickyLeaseMode(mp.StickyLeaseMode),
+		ManualUnavailableAction:          normalizeManualUnavailableAction(mp.ManualUnavailableAction),
+		ManualUnavailableGraceNs:         normalizeManualUnavailableGraceNs(mp.ManualUnavailableGraceNs),
 		RegexFilters:                     append([]string(nil), mp.RegexFilters...),
 		RegionFilters:                    append([]string(nil), mp.RegionFilters...),
 		RegionFilterInvert:               mp.RegionFilterInvert,
@@ -131,6 +161,9 @@ func (cfg platformConfig) toModel(id string, updatedAtNs int64) model.Platform {
 		ID:                               id,
 		Name:                             cfg.Name,
 		StickyTTLNs:                      cfg.StickyTTLNs,
+		StickyLeaseMode:                  cfg.StickyLeaseMode,
+		ManualUnavailableAction:          cfg.ManualUnavailableAction,
+		ManualUnavailableGraceNs:         cfg.ManualUnavailableGraceNs,
 		RegexFilters:                     append([]string(nil), cfg.RegexFilters...),
 		RegionFilters:                    append([]string(nil), cfg.RegionFilters...),
 		RegionFilterInvert:               cfg.RegionFilterInvert,
@@ -153,6 +186,9 @@ func (cfg platformConfig) toRuntime(id string) (*platform.Platform, error) {
 		compiledRegexFilters,
 		cfg.RegionFilters,
 		cfg.StickyTTLNs,
+		cfg.StickyLeaseMode,
+		cfg.ManualUnavailableAction,
+		cfg.ManualUnavailableGraceNs,
 		cfg.ReverseProxyMissAction,
 		cfg.ReverseProxyEmptyAccountBehavior,
 		cfg.ReverseProxyFixedAccountHeader,
@@ -225,6 +261,28 @@ func validatePlatformAllocationPolicy(raw string) *ServiceError {
 	))
 }
 
+func validateStickyLeaseMode(raw string) *ServiceError {
+	if platform.StickyLeaseMode(raw).IsValid() {
+		return nil
+	}
+	return invalidArg(fmt.Sprintf(
+		"sticky_lease_mode: must be %s or %s",
+		platform.StickyLeaseModeTTL,
+		platform.StickyLeaseModeManual,
+	))
+}
+
+func validateManualUnavailableAction(raw string) *ServiceError {
+	if platform.ManualUnavailableAction(raw).IsValid() {
+		return nil
+	}
+	return invalidArg(fmt.Sprintf(
+		"manual_unavailable_action: must be %s or %s",
+		platform.ManualUnavailableActionHold,
+		platform.ManualUnavailableActionAutoClean,
+	))
+}
+
 func setPlatformStickyTTL(cfg *platformConfig, d time.Duration) *ServiceError {
 	if d <= 0 {
 		return invalidArg("sticky_ttl: must be > 0")
@@ -249,6 +307,30 @@ func setPlatformEmptyAccountBehavior(cfg *platformConfig, behavior string) *Serv
 	return nil
 }
 
+func setStickyLeaseMode(cfg *platformConfig, mode string) *ServiceError {
+	if err := validateStickyLeaseMode(mode); err != nil {
+		return err
+	}
+	cfg.StickyLeaseMode = mode
+	return nil
+}
+
+func setManualUnavailableAction(cfg *platformConfig, action string) *ServiceError {
+	if err := validateManualUnavailableAction(action); err != nil {
+		return err
+	}
+	cfg.ManualUnavailableAction = action
+	return nil
+}
+
+func setManualUnavailableGrace(cfg *platformConfig, d time.Duration) *ServiceError {
+	if d < 0 {
+		return invalidArg("manual_unavailable_grace: must be >= 0")
+	}
+	cfg.ManualUnavailableGraceNs = int64(d)
+	return nil
+}
+
 func setPlatformAllocationPolicy(cfg *platformConfig, policy string) *ServiceError {
 	if err := validatePlatformAllocationPolicy(policy); err != nil {
 		return err
@@ -265,6 +347,15 @@ func validatePlatformConfig(cfg *platformConfig, validateRegionFilters bool) *Se
 	}
 	if err := validatePlatformEmptyAccountConfig(cfg); err != nil {
 		return err
+	}
+	if err := validateStickyLeaseMode(cfg.StickyLeaseMode); err != nil {
+		return err
+	}
+	if err := validateManualUnavailableAction(cfg.ManualUnavailableAction); err != nil {
+		return err
+	}
+	if cfg.ManualUnavailableGraceNs < 0 {
+		return invalidArg("manual_unavailable_grace: must be >= 0")
 	}
 	return nil
 }
@@ -329,6 +420,9 @@ func (s *ControlPlaneService) GetPlatform(id string) (*PlatformResponse, error) 
 type CreatePlatformRequest struct {
 	Name                             *string  `json:"name"`
 	StickyTTL                        *string  `json:"sticky_ttl"`
+	StickyLeaseMode                  *string  `json:"sticky_lease_mode"`
+	ManualUnavailableAction          *string  `json:"manual_unavailable_action"`
+	ManualUnavailableGrace           *string  `json:"manual_unavailable_grace"`
 	RegexFilters                     []string `json:"regex_filters"`
 	RegionFilters                    []string `json:"region_filters"`
 	RegionFilterInvert               *bool    `json:"region_filter_invert"`
@@ -363,6 +457,25 @@ func (s *ControlPlaneService) CreatePlatform(req CreatePlatformRequest) (*Platfo
 			return nil, invalidArg("sticky_ttl: " + err.Error())
 		}
 		if err := setPlatformStickyTTL(&cfg, d); err != nil {
+			return nil, err
+		}
+	}
+	if req.StickyLeaseMode != nil {
+		if err := setStickyLeaseMode(&cfg, *req.StickyLeaseMode); err != nil {
+			return nil, err
+		}
+	}
+	if req.ManualUnavailableAction != nil {
+		if err := setManualUnavailableAction(&cfg, *req.ManualUnavailableAction); err != nil {
+			return nil, err
+		}
+	}
+	if req.ManualUnavailableGrace != nil {
+		d, err := time.ParseDuration(*req.ManualUnavailableGrace)
+		if err != nil {
+			return nil, invalidArg("manual_unavailable_grace: " + err.Error())
+		}
+		if err := setManualUnavailableGrace(&cfg, d); err != nil {
 			return nil, err
 		}
 	}
@@ -460,6 +573,27 @@ func (s *ControlPlaneService) UpdatePlatform(id string, patchJSON json.RawMessag
 		return nil, err
 	} else if ok {
 		if err := setPlatformStickyTTL(&cfg, d); err != nil {
+			return nil, err
+		}
+	}
+	if mode, ok, err := patch.optionalString("sticky_lease_mode"); err != nil {
+		return nil, err
+	} else if ok {
+		if err := setStickyLeaseMode(&cfg, mode); err != nil {
+			return nil, err
+		}
+	}
+	if action, ok, err := patch.optionalString("manual_unavailable_action"); err != nil {
+		return nil, err
+	} else if ok {
+		if err := setManualUnavailableAction(&cfg, action); err != nil {
+			return nil, err
+		}
+	}
+	if d, ok, err := patch.optionalDurationString("manual_unavailable_grace"); err != nil {
+		return nil, err
+	} else if ok {
+		if err := setManualUnavailableGrace(&cfg, d); err != nil {
 			return nil, err
 		}
 	}

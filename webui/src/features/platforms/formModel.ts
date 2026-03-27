@@ -1,5 +1,11 @@
 import { z } from "zod";
-import { allocationPolicies, emptyAccountBehaviors, missActions } from "./constants";
+import {
+  allocationPolicies,
+  emptyAccountBehaviors,
+  manualUnavailableActions,
+  missActions,
+  stickyLeaseModes,
+} from "./constants";
 import { parseHeaderLines, parseLinesToList } from "./formParsers";
 import type { Platform, PlatformCreateInput, PlatformUpdateInput } from "./types";
 
@@ -31,6 +37,9 @@ export const platformFormSchema = z.object({
       message: "平台名称不能为保留字",
     }),
   sticky_ttl: z.string().optional(),
+  sticky_lease_mode: z.enum(stickyLeaseModes),
+  manual_unavailable_action: z.enum(manualUnavailableActions),
+  manual_unavailable_grace: z.string().optional(),
   regex_filters_text: z.string().optional(),
   region_filters_text: z.string().optional(),
   region_filter_invert: z.boolean(),
@@ -49,6 +58,13 @@ export const platformFormSchema = z.object({
       message: "用于提取 Account 的 Headers 不能为空",
     });
   }
+  if (value.sticky_lease_mode === "MANUAL" && !value.manual_unavailable_grace?.trim()) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["manual_unavailable_grace"],
+      message: "长租约模式下不可用观察期不能为空",
+    });
+  }
 });
 
 export type PlatformFormValues = z.infer<typeof platformFormSchema>;
@@ -56,6 +72,9 @@ export type PlatformFormValues = z.infer<typeof platformFormSchema>;
 export const defaultPlatformFormValues: PlatformFormValues = {
   name: "",
   sticky_ttl: "",
+  sticky_lease_mode: "TTL",
+  manual_unavailable_action: "HOLD",
+  manual_unavailable_grace: "0s",
   regex_filters_text: "",
   region_filters_text: "",
   region_filter_invert: false,
@@ -72,6 +91,9 @@ export function platformToFormValues(platform: Platform): PlatformFormValues {
   return {
     name: platform.name,
     sticky_ttl: platform.sticky_ttl,
+    sticky_lease_mode: platform.sticky_lease_mode,
+    manual_unavailable_action: platform.manual_unavailable_action,
+    manual_unavailable_grace: platform.manual_unavailable_grace,
     regex_filters_text: regexFilters.join("\n"),
     region_filters_text: regionFilters.join("\n"),
     region_filter_invert: platform.region_filter_invert,
@@ -85,6 +107,9 @@ export function platformToFormValues(platform: Platform): PlatformFormValues {
 function toPlatformPayloadBase(values: PlatformFormValues) {
   return {
     name: values.name.trim(),
+    sticky_lease_mode: values.sticky_lease_mode,
+    manual_unavailable_action: values.manual_unavailable_action,
+    manual_unavailable_grace: values.manual_unavailable_grace?.trim() || "0s",
     regex_filters: parseLinesToList(values.regex_filters_text),
     region_filters: parseLinesToList(values.region_filters_text, (value) => value.toLowerCase()),
     region_filter_invert: values.region_filter_invert,
