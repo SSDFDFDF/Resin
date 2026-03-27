@@ -1512,6 +1512,85 @@ trojan://password@example.com:443?type=httpupgrade&host=upgrade.example.com&path
 	}
 }
 
+func TestParseGeneralSubscription_AnyTLSURIAdvancedFields(t *testing.T) {
+	data := []byte(
+		"anytls://anytls-pass@example.com:8443?sni=example.com&allowInsecure=1&alpn=h2%2Chttp%2F1.1&fp=chrome&idle-session-check-interval=30&idle-session-timeout=45s&min-idle-session=2#AnyTLS%20Node",
+	)
+
+	nodes, err := ParseGeneralSubscription(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(nodes) != 1 {
+		t.Fatalf("expected 1 parsed node, got %d", len(nodes))
+	}
+
+	obj := parseNodeRaw(t, nodes[0].RawOptions)
+	if got := obj["type"]; got != "anytls" {
+		t.Fatalf("type: got %v", got)
+	}
+	if got := obj["tag"]; got != "AnyTLS Node" {
+		t.Fatalf("tag: got %v", got)
+	}
+	if got := obj["server_port"]; got != float64(8443) {
+		t.Fatalf("server_port: got %v", got)
+	}
+	if got := obj["password"]; got != "anytls-pass" {
+		t.Fatalf("password: got %v", got)
+	}
+	if got := obj["idle_session_check_interval"]; got != "30s" {
+		t.Fatalf("idle_session_check_interval: got %v", got)
+	}
+	if got := obj["idle_session_timeout"]; got != "45s" {
+		t.Fatalf("idle_session_timeout: got %v", got)
+	}
+	if got := obj["min_idle_session"]; got != float64(2) {
+		t.Fatalf("min_idle_session: got %v", got)
+	}
+	tls := mustMapField(t, obj, "tls")
+	if got := tls["server_name"]; got != "example.com" {
+		t.Fatalf("tls.server_name: got %v", got)
+	}
+	if got := tls["insecure"]; got != true {
+		t.Fatalf("tls.insecure: got %v", got)
+	}
+	alpn, ok := tls["alpn"].([]any)
+	if !ok {
+		t.Fatalf("tls.alpn expected []any, got %T", tls["alpn"])
+	}
+	if len(alpn) != 2 || alpn[0] != "h2" || alpn[1] != "http/1.1" {
+		t.Fatalf("tls.alpn: got %v", alpn)
+	}
+	utls := mustMapField(t, tls, "utls")
+	if got := utls["fingerprint"]; got != "chrome" {
+		t.Fatalf("tls.utls.fingerprint: got %v", got)
+	}
+}
+
+func TestParseGeneralSubscription_AnyTLSURIQueryPassword(t *testing.T) {
+	data := []byte("anytls://edge.example.com:443?password=query-pass&servername=edge.example.com")
+
+	nodes, err := ParseGeneralSubscription(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(nodes) != 1 {
+		t.Fatalf("expected 1 parsed node, got %d", len(nodes))
+	}
+
+	obj := parseNodeRaw(t, nodes[0].RawOptions)
+	if got := obj["password"]; got != "query-pass" {
+		t.Fatalf("password: got %v", got)
+	}
+	tls := mustMapField(t, obj, "tls")
+	if got := tls["server_name"]; got != "edge.example.com" {
+		t.Fatalf("tls.server_name: got %v", got)
+	}
+	if _, ok := tls["insecure"]; ok {
+		t.Fatalf("tls.insecure should be absent, got %v", tls["insecure"])
+	}
+}
+
 func TestParseGeneralSubscription_HY2URIAliasAndQueryPassword(t *testing.T) {
 	data := []byte(
 		"hy2://hy2.example.com:443?password=hy2-password&sni=hy2.example.com&obfs=salamander&obfs-password=obfs-secret&ports=443,8443&up=20&down=80&hop-interval=10&fp=chrome&ca=%2Fetc%2Fssl%2Fcerts%2Fhy2.pem&ca-str=-----BEGIN%20CERT-----",
@@ -2191,6 +2270,34 @@ func TestParseGeneralSubscription_Base64WrappedURIs(t *testing.T) {
 	}
 	if got := obj["tag"]; got != "SS-Node" {
 		t.Fatalf("expected tag SS-Node, got %v", got)
+	}
+}
+
+func TestParseGeneralSubscription_Base64WrappedAnyTLSURI(t *testing.T) {
+	plain := "anytls://base64-pass@example.com:443?insecure=0&sni=example.com#AnyTLS-Base64"
+	encoded := base64.StdEncoding.EncodeToString([]byte(plain))
+
+	nodes, err := ParseGeneralSubscription([]byte(encoded))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(nodes) != 1 {
+		t.Fatalf("expected 1 parsed node, got %d", len(nodes))
+	}
+
+	obj := parseNodeRaw(t, nodes[0].RawOptions)
+	if got := obj["type"]; got != "anytls" {
+		t.Fatalf("expected type anytls, got %v", got)
+	}
+	if got := obj["tag"]; got != "AnyTLS-Base64" {
+		t.Fatalf("expected tag AnyTLS-Base64, got %v", got)
+	}
+	tls := mustMapField(t, obj, "tls")
+	if got := tls["server_name"]; got != "example.com" {
+		t.Fatalf("tls.server_name: got %v", got)
+	}
+	if _, ok := tls["insecure"]; ok {
+		t.Fatalf("tls.insecure should be absent, got %v", tls["insecure"])
 	}
 }
 

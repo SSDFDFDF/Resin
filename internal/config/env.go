@@ -35,6 +35,7 @@ type EnvConfig struct {
 	DefaultPlatformStickyTTL                        time.Duration
 	DefaultPlatformRegexFilters                     []string
 	DefaultPlatformRegionFilters                    []string
+	DefaultPlatformRegionFilterInvert               bool
 	DefaultPlatformReverseProxyMissAction           string
 	DefaultPlatformReverseProxyEmptyAccountBehavior string
 	DefaultPlatformReverseProxyFixedAccountHeader   string
@@ -92,6 +93,7 @@ func LoadEnvConfig() (*EnvConfig, error) {
 	cfg.DefaultPlatformStickyTTL = envDuration("RESIN_DEFAULT_PLATFORM_STICKY_TTL", 7*24*time.Hour, &errs)
 	cfg.DefaultPlatformRegexFilters = envStringSlice("RESIN_DEFAULT_PLATFORM_REGEX_FILTERS", []string{}, &errs)
 	cfg.DefaultPlatformRegionFilters = envStringSlice("RESIN_DEFAULT_PLATFORM_REGION_FILTERS", []string{}, &errs)
+	cfg.DefaultPlatformRegionFilterInvert = envBool("RESIN_DEFAULT_PLATFORM_REGION_FILTER_INVERT", false, &errs)
 	cfg.DefaultPlatformReverseProxyMissAction = envStr(
 		"RESIN_DEFAULT_PLATFORM_REVERSE_PROXY_MISS_ACTION",
 		string(platform.ReverseProxyMissActionTreatAsEmpty),
@@ -375,6 +377,19 @@ func envStringSlice(key string, defaultVal []string, errs *[]string) []string {
 		return []string{}
 	}
 	return out
+}
+
+func envBool(key string, defaultVal bool, errs *[]string) bool {
+	v := os.Getenv(key)
+	if v == "" {
+		return defaultVal
+	}
+	b, err := strconv.ParseBool(v)
+	if err != nil {
+		*errs = append(*errs, fmt.Sprintf("%s: invalid boolean %q", key, v))
+		return defaultVal
+	}
+	return b
 }
 
 func validatePort(name string, value int, errs *[]string) {

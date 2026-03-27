@@ -30,8 +30,9 @@ type Platform struct {
 	Name string
 
 	// Filter configuration.
-	RegexFilters  []*regexp.Regexp
-	RegionFilters []string // lowercase ISO codes
+	RegexFilters       []*regexp.Regexp
+	RegionFilters      []string // lowercase ISO codes
+	RegionFilterInvert bool
 
 	// Other config fields.
 	StickyTTLNs                      int64
@@ -48,13 +49,18 @@ type Platform struct {
 }
 
 // NewPlatform creates a Platform with an empty routable view.
-func NewPlatform(id, name string, regexFilters []*regexp.Regexp, regionFilters []string) *Platform {
+func NewPlatform(id, name string, regexFilters []*regexp.Regexp, regionFilters []string, regionFilterInvert ...bool) *Platform {
+	invert := false
+	if len(regionFilterInvert) > 0 {
+		invert = regionFilterInvert[0]
+	}
 	return &Platform{
-		ID:            id,
-		Name:          name,
-		RegexFilters:  regexFilters,
-		RegionFilters: regionFilters,
-		view:          NewRoutableView(),
+		ID:                 id,
+		Name:               name,
+		RegexFilters:       regexFilters,
+		RegionFilters:      regionFilters,
+		RegionFilterInvert: invert,
+		view:               NewRoutableView(),
 	}
 }
 
@@ -138,7 +144,7 @@ func (p *Platform) evaluateNode(
 	// 4. Region filter (when configured).
 	if len(p.RegionFilters) > 0 {
 		region := entry.GetRegion(geoLookup)
-		if !matchRegion(region, p.RegionFilters) {
+		if !matchRegion(region, p.RegionFilters, p.RegionFilterInvert) {
 			return false
 		}
 	}
@@ -152,6 +158,10 @@ func (p *Platform) evaluateNode(
 }
 
 // matchRegion checks if the region is in the allowed list.
-func matchRegion(region string, allowed []string) bool {
-	return slices.Contains(allowed, region)
+func matchRegion(region string, allowed []string, invert bool) bool {
+	matched := slices.Contains(allowed, region)
+	if invert {
+		return !matched
+	}
+	return matched
 }

@@ -29,6 +29,7 @@ func newTestServer() *Server {
 		DefaultPlatformStickyTTL:              7 * 24 * time.Hour,
 		DefaultPlatformRegexFilters:           []string{"^Provider/.*"},
 		DefaultPlatformRegionFilters:          []string{"us", "hk"},
+		DefaultPlatformRegionFilterInvert:     true,
 		DefaultPlatformReverseProxyMissAction: "TREAT_AS_EMPTY",
 		DefaultPlatformReverseProxyEmptyAccountBehavior: "ACCOUNT_HEADER_RULE",
 		DefaultPlatformReverseProxyFixedAccountHeader:   "Authorization",
@@ -310,6 +311,9 @@ func TestSystemEnvConfig_OK(t *testing.T) {
 	}
 	if body["default_platform_sticky_ttl"] != "168h0m0s" {
 		t.Errorf("default_platform_sticky_ttl: got %q, want %q", body["default_platform_sticky_ttl"], "168h0m0s")
+	}
+	if body["default_platform_region_filter_invert"] != true {
+		t.Errorf("default_platform_region_filter_invert: got %v, want true", body["default_platform_region_filter_invert"])
 	}
 	if body["default_platform_reverse_proxy_empty_account_behavior"] != "ACCOUNT_HEADER_RULE" {
 		t.Errorf(

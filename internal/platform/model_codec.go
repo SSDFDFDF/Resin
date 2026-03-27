@@ -48,13 +48,14 @@ func NewConfiguredPlatform(
 	emptyAccountBehavior string,
 	fixedAccountHeader string,
 	allocationPolicy string,
+	regionFilterInvert ...bool,
 ) *Platform {
 	normalizedFixedHeaders, fixedHeaders, err := NormalizeFixedAccountHeaders(fixedAccountHeader)
 	if err != nil {
 		normalizedFixedHeaders = strings.TrimSpace(fixedAccountHeader)
 		fixedHeaders = nil
 	}
-	plat := NewPlatform(id, name, regexFilters, regionFilters)
+	plat := NewPlatform(id, name, regexFilters, regionFilters, regionFilterInvert...)
 	plat.StickyTTLNs = stickyTTLNs
 	plat.ReverseProxyMissAction = missAction
 	plat.ReverseProxyEmptyAccountBehavior = emptyAccountBehavior
@@ -116,5 +117,6 @@ func BuildFromModel(mp model.Platform) (*Platform, error) {
 		emptyAccountBehavior,
 		fixedHeader,
 		mp.AllocationPolicy,
+		mp.RegionFilterInvert,
 	), nil
 }

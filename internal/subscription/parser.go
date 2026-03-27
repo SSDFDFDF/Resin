@@ -67,7 +67,7 @@ func NewGeneralSubscriptionParser() *GeneralSubscriptionParser {
 }
 
 // ParseGeneralSubscription parses sing-box JSON / Clash JSON|YAML / URI-line
-// subscriptions (vmess/vless/trojan/ss/hysteria2/http/https/socks5/socks5h),
+// subscriptions (vmess/vless/trojan/ss/hysteria2/anytls/http/https/socks5/socks5h),
 // plus plain HTTP proxy lines (IP:PORT or IP:PORT:USER:PASS), with optional
 // base64-wrapped content support.
 func ParseGeneralSubscription(data []byte) ([]ParsedNode, error) {
@@ -1866,6 +1866,9 @@ func parseURILineSubscription(text string) ([]ParsedNode, bool) {
 		case strings.HasPrefix(lower, "hy2://"):
 			recognized = true
 			node, ok = parseHysteria2URI(line)
+		case strings.HasPrefix(lower, "anytls://"):
+			recognized = true
+			node, ok = parseAnyTLSURI(line)
 		case strings.HasPrefix(lower, "ssd://"):
 			recognized = true
 			extraNode, ok = parseSSDURI(line)
@@ -3348,6 +3351,89 @@ func parseHysteria2URI(uri string) (ParsedNode, bool) {
 		}
 		outbound["obfs"] = obfs
 	}
+	return buildParsedNode(outbound)
+}
+
+func parseAnyTLSURI(uri string) (ParsedNode, bool) {
+	u, err := url.Parse(uri)
+	if err != nil {
+		return ParsedNode{}, false
+	}
+
+	password := ""
+	if u.User != nil {
+		username := strings.TrimSpace(u.User.Username())
+		if parsedPassword, ok := u.User.Password(); ok {
+			password = strings.TrimSpace(username + ":" + parsedPassword)
+		} else {
+			password = username
+		}
+	}
+
+	query := u.Query()
+	if password == "" {
+		password = strings.TrimSpace(query.Get("password"))
+	}
+	server := strings.TrimSpace(u.Hostname())
+	if password == "" || server == "" {
+		return ParsedNode{}, false
+	}
+
+	port := uriPortOrDefault(u, 443)
+	tag := decodeTag(u.Fragment)
+	if tag == "" {
+		tag = defaultTag("", "anytls", server, port)
+	}
+
+	tls := newClashEnabledTLS(
+		firstNonEmpty(
+			query.Get("sni"),
+			query.Get("servername"),
+			query.Get("peer"),
+		),
+		queryBool(query, "allowInsecure", "insecure", "skip-cert-verify"),
+		splitALPN(query.Get("alpn")),
+	)
+	applyUTLSFromValue(tls, firstNonEmpty(
+		query.Get("fp"),
+		query.Get("fingerprint"),
+		query.Get("client-fingerprint"),
+		query.Get("client_fingerprint"),
+	))
+
+	outbound := map[string]any{
+		"type":        "anytls",
+		"tag":         tag,
+		"server":      server,
+		"server_port": port,
+		"password":    password,
+		"tls":         tls,
+	}
+	if interval, ok := normalizeDurationValue(
+		firstNonEmpty(
+			query.Get("idle-session-check-interval"),
+			query.Get("idle_session_check_interval"),
+		),
+		"s",
+	); ok {
+		outbound["idle_session_check_interval"] = interval
+	}
+	if timeout, ok := normalizeDurationValue(
+		firstNonEmpty(
+			query.Get("idle-session-timeout"),
+			query.Get("idle_session_timeout"),
+		),
+		"s",
+	); ok {
+		outbound["idle_session_timeout"] = timeout
+	}
+	if minIdle, ok := parsePositiveUint64(firstNonEmpty(
+		query.Get("min-idle-session"),
+		query.Get("min_idle_session"),
+	)); ok {
+		outbound["min_idle_session"] = minIdle
+	}
+
 	return buildParsedNode(outbound)
 }
 

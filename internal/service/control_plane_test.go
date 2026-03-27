@@ -463,6 +463,7 @@ func TestCreatePlatform_BuildsRoutableViewBeforePublish(t *testing.T) {
 			DefaultPlatformStickyTTL:              30 * time.Minute,
 			DefaultPlatformRegexFilters:           []string{},
 			DefaultPlatformRegionFilters:          []string{},
+			DefaultPlatformRegionFilterInvert:     true,
 			DefaultPlatformReverseProxyMissAction: "TREAT_AS_EMPTY",
 			DefaultPlatformAllocationPolicy:       "BALANCED",
 		},
@@ -483,6 +484,12 @@ func TestCreatePlatform_BuildsRoutableViewBeforePublish(t *testing.T) {
 	}
 	if !plat.View().Contains(hash) {
 		t.Fatalf("new platform view should contain seeded hash %s", hash.Hex())
+	}
+	if !created.RegionFilterInvert {
+		t.Fatal("created platform should inherit default region_filter_invert")
+	}
+	if !plat.RegionFilterInvert {
+		t.Fatal("runtime platform should inherit default region_filter_invert")
 	}
 }
 
@@ -536,6 +543,70 @@ func TestCreatePlatform_RejectsReservedAPIName(t *testing.T) {
 	}
 	if !strings.Contains(svcErr.Message, "name:") || !strings.Contains(svcErr.Message, "reserved") {
 		t.Fatalf("service error message = %q, expected reserved-name hint", svcErr.Message)
+	}
+}
+
+func TestCreatePlatform_RegionFilterInvert(t *testing.T) {
+	dir := t.TempDir()
+	engine, closer, err := state.PersistenceBootstrap(
+		filepath.Join(dir, "state"),
+		filepath.Join(dir, "cache"),
+	)
+	if err != nil {
+		t.Fatalf("PersistenceBootstrap: %v", err)
+	}
+	t.Cleanup(func() { _ = closer.Close() })
+
+	subMgr := topology.NewSubscriptionManager()
+	pool := topology.NewGlobalNodePool(topology.PoolConfig{
+		SubLookup:              subMgr.Lookup,
+		GeoLookup:              func(netip.Addr) string { return "us" },
+		MaxLatencyTableEntries: 16,
+		MaxConsecutiveFailures: func() int { return 3 },
+		LatencyDecayWindow:     func() time.Duration { return 10 * time.Minute },
+	})
+
+	cp := &ControlPlaneService{
+		Engine: engine,
+		Pool:   pool,
+		SubMgr: subMgr,
+		EnvCfg: &config.EnvConfig{
+			DefaultPlatformStickyTTL:              30 * time.Minute,
+			DefaultPlatformRegexFilters:           []string{},
+			DefaultPlatformRegionFilters:          []string{},
+			DefaultPlatformReverseProxyMissAction: "TREAT_AS_EMPTY",
+			DefaultPlatformAllocationPolicy:       "BALANCED",
+		},
+	}
+
+	name := "invert-platform"
+	invert := true
+	created, err := cp.CreatePlatform(CreatePlatformRequest{
+		Name:               &name,
+		RegionFilters:      []string{"us"},
+		RegionFilterInvert: &invert,
+	})
+	if err != nil {
+		t.Fatalf("CreatePlatform: %v", err)
+	}
+	if !created.RegionFilterInvert {
+		t.Fatal("response region_filter_invert should be true")
+	}
+
+	stored, err := engine.GetPlatform(created.ID)
+	if err != nil {
+		t.Fatalf("GetPlatform: %v", err)
+	}
+	if !stored.RegionFilterInvert {
+		t.Fatal("stored region_filter_invert should be true")
+	}
+
+	plat, ok := pool.GetPlatform(created.ID)
+	if !ok {
+		t.Fatalf("platform %s was not registered in pool", created.ID)
+	}
+	if !plat.RegionFilterInvert {
+		t.Fatal("runtime region_filter_invert should be true")
 	}
 }
 
@@ -954,6 +1025,7 @@ func TestResetPlatformToDefault_SupportsBuiltInDefaultPlatform(t *testing.T) {
 			DefaultPlatformStickyTTL:              45 * time.Minute,
 			DefaultPlatformRegexFilters:           []string{"^prod-"},
 			DefaultPlatformRegionFilters:          []string{"jp"},
+			DefaultPlatformRegionFilterInvert:     true,
 			DefaultPlatformReverseProxyMissAction: string(platform.ReverseProxyMissActionReject),
 			DefaultPlatformAllocationPolicy:       string(platform.AllocationPolicyPreferIdleIP),
 		},
@@ -978,6 +1050,9 @@ func TestResetPlatformToDefault_SupportsBuiltInDefaultPlatform(t *testing.T) {
 	if !reflect.DeepEqual(resp.RegionFilters, []string{"jp"}) {
 		t.Fatalf("response region_filters = %v, want %v", resp.RegionFilters, []string{"jp"})
 	}
+	if !resp.RegionFilterInvert {
+		t.Fatal("response region_filter_invert should be true")
+	}
 	if resp.ReverseProxyMissAction != string(platform.ReverseProxyMissActionReject) {
 		t.Fatalf("response reverse_proxy_miss_action = %q, want %q", resp.ReverseProxyMissAction, platform.ReverseProxyMissActionReject)
 	}
@@ -1001,6 +1076,9 @@ func TestResetPlatformToDefault_SupportsBuiltInDefaultPlatform(t *testing.T) {
 	if !reflect.DeepEqual(stored.RegionFilters, []string{"jp"}) {
 		t.Fatalf("stored region_filters = %v, want %v", stored.RegionFilters, []string{"jp"})
 	}
+	if !stored.RegionFilterInvert {
+		t.Fatal("stored region_filter_invert should be true")
+	}
 	if stored.ReverseProxyMissAction != string(platform.ReverseProxyMissActionReject) {
 		t.Fatalf("stored reverse_proxy_miss_action = %q, want %q", stored.ReverseProxyMissAction, platform.ReverseProxyMissActionReject)
 	}
@@ -1023,6 +1101,9 @@ func TestResetPlatformToDefault_SupportsBuiltInDefaultPlatform(t *testing.T) {
 	}
 	if !reflect.DeepEqual(plat.RegionFilters, []string{"jp"}) {
 		t.Fatalf("pool region_filters = %v, want %v", plat.RegionFilters, []string{"jp"})
+	}
+	if !plat.RegionFilterInvert {
+		t.Fatal("pool region_filter_invert should be true")
 	}
 	if plat.ReverseProxyMissAction != string(platform.ReverseProxyMissActionReject) {
 		t.Fatalf("pool reverse_proxy_miss_action = %q, want %q", plat.ReverseProxyMissAction, platform.ReverseProxyMissActionReject)
@@ -1095,6 +1176,7 @@ func TestResetPlatformToDefault_DoesNotDecodeCorruptPersistedFiltersJSON(t *test
 			DefaultPlatformStickyTTL:              45 * time.Minute,
 			DefaultPlatformRegexFilters:           []string{"^prod-"},
 			DefaultPlatformRegionFilters:          []string{"jp"},
+			DefaultPlatformRegionFilterInvert:     true,
 			DefaultPlatformReverseProxyMissAction: "REJECT",
 			DefaultPlatformAllocationPolicy:       "PREFER_IDLE_IP",
 		},
@@ -1116,6 +1198,9 @@ func TestResetPlatformToDefault_DoesNotDecodeCorruptPersistedFiltersJSON(t *test
 	if !reflect.DeepEqual(resp.RegionFilters, []string{"jp"}) {
 		t.Fatalf("response region_filters = %v, want %v", resp.RegionFilters, []string{"jp"})
 	}
+	if !resp.RegionFilterInvert {
+		t.Fatal("response region_filter_invert should be true")
+	}
 	if resp.ReverseProxyMissAction != "REJECT" {
 		t.Fatalf("response reverse_proxy_miss_action = %q, want REJECT", resp.ReverseProxyMissAction)
 	}
@@ -1133,6 +1218,9 @@ func TestResetPlatformToDefault_DoesNotDecodeCorruptPersistedFiltersJSON(t *test
 	}
 	if !reflect.DeepEqual(storedResp.RegionFilters, []string{"jp"}) {
 		t.Fatalf("stored region_filters = %v, want %v", storedResp.RegionFilters, []string{"jp"})
+	}
+	if !storedResp.RegionFilterInvert {
+		t.Fatal("stored region_filter_invert should be true")
 	}
 }
 

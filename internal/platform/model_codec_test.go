@@ -15,6 +15,7 @@ func TestBuildFromModel_Success(t *testing.T) {
 		StickyTTLNs:                      3600,
 		RegexFilters:                     []string{`^us-.*$`},
 		RegionFilters:                    []string{"us", "jp"},
+		RegionFilterInvert:               true,
 		ReverseProxyMissAction:           "REJECT",
 		ReverseProxyEmptyAccountBehavior: "FIXED_HEADER",
 		ReverseProxyFixedAccountHeader:   "x-account-id",
@@ -57,6 +58,9 @@ func TestBuildFromModel_Success(t *testing.T) {
 	}
 	if len(plat.RegionFilters) != 2 || plat.RegionFilters[0] != "us" || plat.RegionFilters[1] != "jp" {
 		t.Fatalf("region filters mismatch: %+v", plat.RegionFilters)
+	}
+	if !plat.RegionFilterInvert {
+		t.Fatal("region filter invert should be enabled")
 	}
 }
 

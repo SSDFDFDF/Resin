@@ -9,6 +9,7 @@ import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { Input } from "../../components/ui/Input";
 import { Select } from "../../components/ui/Select";
+import { Switch } from "../../components/ui/Switch";
 import { Textarea } from "../../components/ui/Textarea";
 import { ToastContainer } from "../../components/ui/Toast";
 import { useToast } from "../../hooks/useToast";
@@ -441,6 +442,10 @@ export function PlatformDetailPage() {
                       placeholder={t("每行一条，如 hk / us")}
                       {...editForm.register("region_filters_text")}
                     />
+                    <label className="subscription-inline-filter" htmlFor="detail-edit-region-filter-invert" style={{ marginTop: 8 }}>
+                      <Switch id="detail-edit-region-filter-invert" {...editForm.register("region_filter_invert")} />
+                      <span>{t("反向过滤：排除匹配这些地区的节点")}</span>
+                    </label>
                   </div>
 
                   <div className="platform-config-actions">

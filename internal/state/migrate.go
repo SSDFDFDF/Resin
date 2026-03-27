@@ -23,6 +23,7 @@ const (
 	stateVersionAddEmptyAccountBehavior = 2
 	stateVersionAddFixedAccountHeader   = 3
 	stateVersionNormalizeMissAction     = 4
+	stateVersionAddRegionFilterInvert   = 5
 	stateLegacyBaselineVersion          = stateVersionAddFixedAccountHeader
 )
 
@@ -104,9 +105,18 @@ func prepareLegacyStateBaseline(db *sql.DB, driver migratedb.Driver) error {
 	if err != nil {
 		return err
 	}
+	hasRegionFilterInvert, err := hasTableColumn(db, "platforms", "region_filter_invert")
+	if err != nil {
+		return err
+	}
 
 	switch {
+	case hasEmptyBehavior && hasFixedHeader && hasRegionFilterInvert:
+		return setMigrationVersion(driver, stateVersionAddRegionFilterInvert)
 	case hasEmptyBehavior && hasFixedHeader:
+		// Legacy databases with the v3 column shape may still contain
+		// reverse_proxy_miss_action='RANDOM'. Start from v3 so 000004 can
+		// normalize data before 000005 adds region_filter_invert.
 		return setMigrationVersion(driver, stateLegacyBaselineVersion)
 	case hasEmptyBehavior && !hasFixedHeader:
 		return setMigrationVersion(driver, stateVersionAddEmptyAccountBehavior)

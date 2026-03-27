@@ -62,6 +62,9 @@ func TestMigrateStateDB_UpgradesLegacyPlatformsColumns(t *testing.T) {
 	if ok, err := hasTableColumn(db, "platforms", "reverse_proxy_fixed_account_header"); err != nil || !ok {
 		t.Fatalf("expected migrated column reverse_proxy_fixed_account_header, ok=%v err=%v", ok, err)
 	}
+	if ok, err := hasTableColumn(db, "platforms", "region_filter_invert"); err != nil || !ok {
+		t.Fatalf("expected migrated column region_filter_invert, ok=%v err=%v", ok, err)
+	}
 }
 
 func TestMigrateStateDB_LegacyBaselineAdvancesToLatest(t *testing.T) {
@@ -103,8 +106,8 @@ func TestMigrateStateDB_LegacyBaselineAdvancesToLatest(t *testing.T) {
 	if dirty {
 		t.Fatalf("schema_migrations dirty=true")
 	}
-	if version != stateVersionNormalizeMissAction {
-		t.Fatalf("schema_migrations version: got %d, want %d", version, stateVersionNormalizeMissAction)
+	if version != stateVersionAddRegionFilterInvert {
+		t.Fatalf("schema_migrations version: got %d, want %d", version, stateVersionAddRegionFilterInvert)
 	}
 }
 
@@ -175,8 +178,8 @@ func TestMigrateStateDB_NormalizesLegacyRandomMissAction(t *testing.T) {
 	if dirty {
 		t.Fatalf("schema_migrations dirty=true")
 	}
-	if version != stateVersionNormalizeMissAction {
-		t.Fatalf("schema_migrations version: got %d, want %d", version, stateVersionNormalizeMissAction)
+	if version != stateVersionAddRegionFilterInvert {
+		t.Fatalf("schema_migrations version: got %d, want %d", version, stateVersionAddRegionFilterInvert)
 	}
 }
 
@@ -236,7 +239,7 @@ func TestStateRepo_Platforms_CRUD(t *testing.T) {
 
 	p := model.Platform{
 		ID: "plat-1", Name: "Default", StickyTTLNs: 1000,
-		RegexFilters: []string{}, RegionFilters: []string{},
+		RegexFilters: []string{}, RegionFilters: []string{}, RegionFilterInvert: true,
 		ReverseProxyMissAction: "TREAT_AS_EMPTY", AllocationPolicy: "BALANCED",
 		UpdatedAtNs: now,
 	}
@@ -258,6 +261,9 @@ func TestStateRepo_Platforms_CRUD(t *testing.T) {
 			"RANDOM",
 		)
 	}
+	if !got.RegionFilterInvert {
+		t.Fatal("expected region_filter_invert to round-trip as true")
+	}
 
 	// List.
 	list, err := repo.ListPlatforms()
@@ -266,6 +272,9 @@ func TestStateRepo_Platforms_CRUD(t *testing.T) {
 	}
 	if len(list) != 1 || list[0].Name != "Default" {
 		t.Fatalf("unexpected list: %+v", list)
+	}
+	if !list[0].RegionFilterInvert {
+		t.Fatal("expected listed platform to keep region_filter_invert")
 	}
 
 	// Idempotent upsert (update same ID).

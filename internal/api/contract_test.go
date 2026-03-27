@@ -94,6 +94,7 @@ func newControlPlaneTestServerWithBodyLimit(
 			DefaultPlatformStickyTTL:                        30 * time.Minute,
 			DefaultPlatformRegexFilters:                     []string{},
 			DefaultPlatformRegionFilters:                    []string{},
+			DefaultPlatformRegionFilterInvert:               false,
 			DefaultPlatformReverseProxyMissAction:           "TREAT_AS_EMPTY",
 			DefaultPlatformReverseProxyEmptyAccountBehavior: "ACCOUNT_HEADER_RULE",
 			DefaultPlatformReverseProxyFixedAccountHeader:   "Authorization",
@@ -888,6 +889,39 @@ func TestAPIContract_KeywordFilteringOnListEndpoints(t *testing.T) {
 	}
 }
 
+func TestAPIContract_PlatformRegionFilterInvert(t *testing.T) {
+	srv, _, _ := newControlPlaneTestServer(t)
+
+	rec := doJSONRequest(t, srv, http.MethodPost, "/api/v1/platforms", map[string]any{
+		"name":                 "Invert-US",
+		"region_filters":       []string{"us"},
+		"region_filter_invert": true,
+	}, true)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create invert platform status: got %d, want %d, body=%s", rec.Code, http.StatusCreated, rec.Body.String())
+	}
+	body := decodeJSONMap(t, rec)
+	if body["region_filter_invert"] != true {
+		t.Fatalf("region_filter_invert: got %v, want true", body["region_filter_invert"])
+	}
+
+	id, _ := body["id"].(string)
+	if id == "" {
+		t.Fatalf("missing id: body=%s", rec.Body.String())
+	}
+
+	rec = doJSONRequest(t, srv, http.MethodPatch, "/api/v1/platforms/"+id, map[string]any{
+		"region_filter_invert": false,
+	}, true)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("patch invert platform status: got %d, want %d, body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	body = decodeJSONMap(t, rec)
+	if body["region_filter_invert"] != false {
+		t.Fatalf("patched region_filter_invert: got %v, want false", body["region_filter_invert"])
+	}
+}
+
 func TestAPIContract_PlatformStickyTTLMustBePositive(t *testing.T) {
 	srv, _, _ := newControlPlaneTestServer(t)
 
@@ -1103,6 +1137,13 @@ func TestAPIContract_SystemEnvConfigSnapshot(t *testing.T) {
 		t.Fatalf(
 			"default_platform_reverse_proxy_miss_action: got %v, want TREAT_AS_EMPTY",
 			body["default_platform_reverse_proxy_miss_action"],
+		)
+	}
+	if body["default_platform_region_filter_invert"] != cp.EnvCfg.DefaultPlatformRegionFilterInvert {
+		t.Fatalf(
+			"default_platform_region_filter_invert: got %v, want %v",
+			body["default_platform_region_filter_invert"],
+			cp.EnvCfg.DefaultPlatformRegionFilterInvert,
 		)
 	}
 	if body["default_platform_reverse_proxy_empty_account_behavior"] != "ACCOUNT_HEADER_RULE" {

@@ -49,6 +49,7 @@ func TestLoadEnvConfig_Defaults(t *testing.T) {
 	assertEqual(t, "DefaultPlatformStickyTTL", cfg.DefaultPlatformStickyTTL, 7*24*time.Hour)
 	assertEqual(t, "DefaultPlatformRegexFiltersLength", len(cfg.DefaultPlatformRegexFilters), 0)
 	assertEqual(t, "DefaultPlatformRegionFiltersLength", len(cfg.DefaultPlatformRegionFilters), 0)
+	assertEqual(t, "DefaultPlatformRegionFilterInvert", cfg.DefaultPlatformRegionFilterInvert, false)
 	assertEqual(t, "DefaultPlatformReverseProxyMissAction", cfg.DefaultPlatformReverseProxyMissAction, "TREAT_AS_EMPTY")
 	assertEqual(
 		t,
@@ -101,6 +102,7 @@ func TestLoadEnvConfig_EnvOverrides(t *testing.T) {
 	envs["RESIN_DEFAULT_PLATFORM_STICKY_TTL"] = "2h"
 	envs["RESIN_DEFAULT_PLATFORM_REGEX_FILTERS"] = `["^Provider/.*"]`
 	envs["RESIN_DEFAULT_PLATFORM_REGION_FILTERS"] = `["us","hk"]`
+	envs["RESIN_DEFAULT_PLATFORM_REGION_FILTER_INVERT"] = "true"
 	envs["RESIN_DEFAULT_PLATFORM_REVERSE_PROXY_MISS_ACTION"] = "REJECT"
 	envs["RESIN_DEFAULT_PLATFORM_REVERSE_PROXY_EMPTY_ACCOUNT_BEHAVIOR"] = "FIXED_HEADER"
 	envs["RESIN_DEFAULT_PLATFORM_REVERSE_PROXY_FIXED_ACCOUNT_HEADER"] = "x-platform-account"
@@ -130,6 +132,7 @@ func TestLoadEnvConfig_EnvOverrides(t *testing.T) {
 	assertEqual(t, "DefaultPlatformRegionFiltersLength", len(cfg.DefaultPlatformRegionFilters), 2)
 	assertEqual(t, "DefaultPlatformRegionFilters[0]", cfg.DefaultPlatformRegionFilters[0], "us")
 	assertEqual(t, "DefaultPlatformRegionFilters[1]", cfg.DefaultPlatformRegionFilters[1], "hk")
+	assertEqual(t, "DefaultPlatformRegionFilterInvert", cfg.DefaultPlatformRegionFilterInvert, true)
 	assertEqual(t, "DefaultPlatformReverseProxyMissAction", cfg.DefaultPlatformReverseProxyMissAction, "REJECT")
 	assertEqual(
 		t,
@@ -171,6 +174,18 @@ func TestLoadEnvConfig_DefaultPlatformFixedHeaderMultiline(t *testing.T) {
 		cfg.DefaultPlatformReverseProxyFixedAccountHeader,
 		"Authorization\nX-Account-Id",
 	)
+}
+
+func TestLoadEnvConfig_InvalidDefaultPlatformRegionFilterInvert(t *testing.T) {
+	envs := requiredEnvs()
+	envs["RESIN_DEFAULT_PLATFORM_REGION_FILTER_INVERT"] = "not-a-bool"
+	setEnvs(t, envs)
+
+	_, err := LoadEnvConfig()
+	if err == nil {
+		t.Fatal("expected error for invalid RESIN_DEFAULT_PLATFORM_REGION_FILTER_INVERT")
+	}
+	assertContains(t, err.Error(), `RESIN_DEFAULT_PLATFORM_REGION_FILTER_INVERT: invalid boolean "not-a-bool"`)
 }
 
 func TestLoadEnvConfig_MissingAdminToken(t *testing.T) {

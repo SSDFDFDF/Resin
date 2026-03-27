@@ -161,6 +161,29 @@ func TestPlatform_EvaluateNode_RegionFilter(t *testing.T) {
 	}
 }
 
+func TestPlatform_EvaluateNode_RegionFilterInvert(t *testing.T) {
+	p := NewPlatform("p1", "Test", nil, []string{"jp"}, true)
+	h := makeHash(`{"type":"ss"}`)
+	entry := makeFullyRoutableEntry(h, "sub1")
+
+	p.FullRebuild(func(fn func(node.Hash, *node.NodeEntry) bool) {
+		fn(h, entry)
+	}, alwaysLookup, usGeoLookup)
+
+	if p.View().Size() != 1 {
+		t.Fatal("node not in denied region should be routable when invert is enabled")
+	}
+
+	p2 := NewPlatform("p2", "Test", nil, []string{"us"}, true)
+	p2.FullRebuild(func(fn func(node.Hash, *node.NodeEntry) bool) {
+		fn(h, entry)
+	}, alwaysLookup, usGeoLookup)
+
+	if p2.View().Size() != 0 {
+		t.Fatal("node in denied region should not be routable when invert is enabled")
+	}
+}
+
 func TestPlatform_EvaluateNode_RegionFilter_NoEgressIP(t *testing.T) {
 	p := NewPlatform("p1", "Test", nil, []string{"us"})
 	h := makeHash(`{"type":"ss"}`)

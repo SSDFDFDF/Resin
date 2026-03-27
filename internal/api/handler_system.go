@@ -21,6 +21,7 @@ type systemEnvConfigResponse struct {
 	DefaultPlatformStickyTTL                        config.Duration `json:"default_platform_sticky_ttl"`
 	DefaultPlatformRegexFilters                     []string        `json:"default_platform_regex_filters"`
 	DefaultPlatformRegionFilters                    []string        `json:"default_platform_region_filters"`
+	DefaultPlatformRegionFilterInvert               bool            `json:"default_platform_region_filter_invert"`
 	DefaultPlatformReverseProxyMissAction           string          `json:"default_platform_reverse_proxy_miss_action"`
 	DefaultPlatformReverseProxyEmptyAccountBehavior string          `json:"default_platform_reverse_proxy_empty_account_behavior"`
 	DefaultPlatformReverseProxyFixedAccountHeader   string          `json:"default_platform_reverse_proxy_fixed_account_header"`
@@ -117,6 +118,7 @@ func systemEnvConfigSnapshot(envCfg *config.EnvConfig) *systemEnvConfigResponse 
 		DefaultPlatformStickyTTL:              config.Duration(envCfg.DefaultPlatformStickyTTL),
 		DefaultPlatformRegexFilters:           append([]string(nil), envCfg.DefaultPlatformRegexFilters...),
 		DefaultPlatformRegionFilters:          append([]string(nil), envCfg.DefaultPlatformRegionFilters...),
+		DefaultPlatformRegionFilterInvert:     envCfg.DefaultPlatformRegionFilterInvert,
 		DefaultPlatformReverseProxyMissAction: envCfg.DefaultPlatformReverseProxyMissAction,
 		DefaultPlatformReverseProxyEmptyAccountBehavior: envCfg.DefaultPlatformReverseProxyEmptyAccountBehavior,
 		DefaultPlatformReverseProxyFixedAccountHeader:   envCfg.DefaultPlatformReverseProxyFixedAccountHeader,
