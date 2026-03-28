@@ -114,9 +114,15 @@ func (r *StateRepo) UpsertPlatform(p model.Platform) error {
 		return fmt.Errorf("reverse_proxy_miss_action: invalid value %q", p.ReverseProxyMissAction)
 	}
 	p.ReverseProxyMissAction = string(missAction)
-	stickyLeaseMode := platform.NormalizeStickyLeaseMode(p.StickyLeaseMode)
+	stickyLeaseMode, ok := platform.ParseStickyLeaseMode(p.StickyLeaseMode)
+	if !ok {
+		return fmt.Errorf("sticky_lease_mode: invalid value %q", p.StickyLeaseMode)
+	}
 	p.StickyLeaseMode = string(stickyLeaseMode)
-	manualUnavailableAction := platform.NormalizeManualUnavailableAction(p.ManualUnavailableAction)
+	manualUnavailableAction, ok := platform.ParseManualUnavailableAction(p.ManualUnavailableAction)
+	if !ok {
+		return fmt.Errorf("manual_unavailable_action: invalid value %q", p.ManualUnavailableAction)
+	}
 	p.ManualUnavailableAction = string(manualUnavailableAction)
 	if p.ManualUnavailableGraceNs < 0 {
 		return fmt.Errorf("manual_unavailable_grace_ns: must be >= 0, got %d", p.ManualUnavailableGraceNs)

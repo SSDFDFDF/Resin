@@ -125,6 +125,42 @@ func TestBuildFromModel_InvalidMissAction(t *testing.T) {
 	}
 }
 
+func TestBuildFromModel_InvalidStickyLeaseMode(t *testing.T) {
+	_, err := BuildFromModel(model.Platform{
+		ID:                     "plat-1",
+		Name:                   "Platform-1",
+		RegexFilters:           []string{},
+		RegionFilters:          []string{},
+		StickyLeaseMode:        "BROKEN",
+		ReverseProxyMissAction: "TREAT_AS_EMPTY",
+		AllocationPolicy:       "BALANCED",
+	})
+	if err == nil {
+		t.Fatal("expected sticky_lease_mode decode error")
+	}
+	if !strings.Contains(err.Error(), "sticky_lease_mode") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestBuildFromModel_InvalidManualUnavailableAction(t *testing.T) {
+	_, err := BuildFromModel(model.Platform{
+		ID:                      "plat-1",
+		Name:                    "Platform-1",
+		RegexFilters:            []string{},
+		RegionFilters:           []string{},
+		ManualUnavailableAction: "BROKEN",
+		ReverseProxyMissAction:  "TREAT_AS_EMPTY",
+		AllocationPolicy:        "BALANCED",
+	})
+	if err == nil {
+		t.Fatal("expected manual_unavailable_action decode error")
+	}
+	if !strings.Contains(err.Error(), "manual_unavailable_action") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestBuildFromModel_InvalidEmptyAccountBehaviorFallsBackToRandom(t *testing.T) {
 	plat, err := BuildFromModel(model.Platform{
 		ID:                               "plat-1",

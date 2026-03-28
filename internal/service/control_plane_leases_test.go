@@ -333,6 +333,35 @@ func TestInheritLeaseByPlatformName_ParentLeaseMissingOrExpired(t *testing.T) {
 	assertServiceErrorCode(t, err, "NOT_FOUND")
 }
 
+func TestInheritLeaseByPlatformName_RejectsUnavailableManualParentLease(t *testing.T) {
+	cp, plat := newLeaseInheritanceTestService()
+	plat.StickyLeaseMode = string(platform.StickyLeaseModeManual)
+
+	now := time.Now().UnixNano()
+	parent := model.Lease{
+		PlatformID:         plat.ID,
+		Account:            "manual-parent",
+		NodeHash:           node.HashFromRawOptions([]byte(`{"id":"manual-parent-node"}`)).Hex(),
+		EgressIP:           "203.0.113.88",
+		CreatedAtNs:        now - int64(time.Hour),
+		ExpiryNs:           0,
+		LastAccessedNs:     now - int64(time.Minute),
+		UnavailableSinceNs: now - int64(30*time.Second),
+	}
+	seedLease(t, cp, parent)
+
+	err := cp.InheritLeaseByPlatformName(plat.Name, "manual-parent", "child")
+	if err == nil {
+		t.Fatal("expected CONFLICT for unavailable manual parent lease")
+	}
+	assertServiceErrorCode(t, err, "CONFLICT")
+
+	child := cp.Router.ReadLease(model.LeaseKey{PlatformID: plat.ID, Account: "child"})
+	if child != nil {
+		t.Fatal("child lease should not be created from unavailable parent lease")
+	}
+}
+
 func TestInheritLeaseByPlatformName_InvalidArguments(t *testing.T) {
 	cp, _ := newLeaseInheritanceTestService()
 

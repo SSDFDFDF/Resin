@@ -429,6 +429,30 @@ func TestStateRepo_Platform_ValidationRejectsInvalidRegex(t *testing.T) {
 	}
 }
 
+func TestStateRepo_Platform_ValidationRejectsInvalidStickyLeaseControls(t *testing.T) {
+	repo := newTestStateRepo(t)
+	now := time.Now().UnixNano()
+
+	base := model.Platform{
+		ID: "plat-sticky-validation", Name: "StickyValidation", StickyTTLNs: 1000,
+		RegexFilters: []string{}, RegionFilters: []string{},
+		ReverseProxyMissAction: "TREAT_AS_EMPTY", AllocationPolicy: "BALANCED",
+		UpdatedAtNs: now,
+	}
+
+	badMode := base
+	badMode.StickyLeaseMode = "BROKEN"
+	if err := repo.UpsertPlatform(badMode); err == nil {
+		t.Fatal("expected error for invalid sticky_lease_mode")
+	}
+
+	badAction := base
+	badAction.ManualUnavailableAction = "BROKEN"
+	if err := repo.UpsertPlatform(badAction); err == nil {
+		t.Fatal("expected error for invalid manual_unavailable_action")
+	}
+}
+
 func TestStateRepo_Platform_ValidationRejectsInvalidName(t *testing.T) {
 	repo := newTestStateRepo(t)
 	now := time.Now().UnixNano()

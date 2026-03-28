@@ -126,6 +126,9 @@ func (s *ControlPlaneService) InheritLeaseByPlatformName(platformName, parentAcc
 	if parentLease == nil || (parentLease.ExpiryNs > 0 && parentLease.ExpiryNs < nowNs) {
 		return notFound("parent lease not found")
 	}
+	if parentLease.ExpiryNs <= 0 && parentLease.UnavailableSinceNs > 0 {
+		return conflict("parent lease is unavailable")
+	}
 
 	next := *parentLease
 	next.Account = newAccount

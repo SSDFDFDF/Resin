@@ -96,8 +96,22 @@ func BuildFromModel(mp model.Platform) (*Platform, error) {
 	if !ReverseProxyEmptyAccountBehavior(emptyAccountBehavior).IsValid() {
 		emptyAccountBehavior = string(ReverseProxyEmptyAccountBehaviorRandom)
 	}
-	stickyLeaseMode := string(NormalizeStickyLeaseMode(mp.StickyLeaseMode))
-	manualUnavailableAction := string(NormalizeManualUnavailableAction(mp.ManualUnavailableAction))
+	stickyLeaseMode, ok := ParseStickyLeaseMode(mp.StickyLeaseMode)
+	if !ok {
+		return nil, fmt.Errorf(
+			"decode platform %s sticky_lease_mode: invalid value %q",
+			mp.ID,
+			mp.StickyLeaseMode,
+		)
+	}
+	manualUnavailableAction, ok := ParseManualUnavailableAction(mp.ManualUnavailableAction)
+	if !ok {
+		return nil, fmt.Errorf(
+			"decode platform %s manual_unavailable_action: invalid value %q",
+			mp.ID,
+			mp.ManualUnavailableAction,
+		)
+	}
 	manualUnavailableGraceNs := mp.ManualUnavailableGraceNs
 	if manualUnavailableGraceNs < 0 {
 		manualUnavailableGraceNs = 0
@@ -128,8 +142,8 @@ func BuildFromModel(mp model.Platform) (*Platform, error) {
 		regexFilters,
 		append([]string(nil), mp.RegionFilters...),
 		mp.StickyTTLNs,
-		stickyLeaseMode,
-		manualUnavailableAction,
+		string(stickyLeaseMode),
+		string(manualUnavailableAction),
 		manualUnavailableGraceNs,
 		string(missAction),
 		emptyAccountBehavior,

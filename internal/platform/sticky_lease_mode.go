@@ -21,9 +21,20 @@ func (m StickyLeaseMode) IsValid() bool {
 	}
 }
 
-func NormalizeStickyLeaseMode(raw string) StickyLeaseMode {
+func ParseStickyLeaseMode(raw string) (StickyLeaseMode, bool) {
 	mode := StickyLeaseMode(strings.TrimSpace(raw))
+	if mode == "" {
+		return StickyLeaseModeTTL, true
+	}
 	if !mode.IsValid() {
+		return "", false
+	}
+	return mode, true
+}
+
+func NormalizeStickyLeaseMode(raw string) StickyLeaseMode {
+	mode, ok := ParseStickyLeaseMode(raw)
+	if !ok {
 		return StickyLeaseModeTTL
 	}
 	return mode

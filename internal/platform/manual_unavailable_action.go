@@ -22,9 +22,20 @@ func (a ManualUnavailableAction) IsValid() bool {
 	}
 }
 
-func NormalizeManualUnavailableAction(raw string) ManualUnavailableAction {
+func ParseManualUnavailableAction(raw string) (ManualUnavailableAction, bool) {
 	action := ManualUnavailableAction(strings.TrimSpace(raw))
+	if action == "" {
+		return ManualUnavailableActionHold, true
+	}
 	if !action.IsValid() {
+		return "", false
+	}
+	return action, true
+}
+
+func NormalizeManualUnavailableAction(raw string) ManualUnavailableAction {
+	action, ok := ParseManualUnavailableAction(raw)
+	if !ok {
 		return ManualUnavailableActionHold
 	}
 	return action
