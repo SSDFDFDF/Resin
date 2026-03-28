@@ -1139,6 +1139,13 @@ func TestAPIContract_SystemEnvConfigSnapshot(t *testing.T) {
 			body["default_platform_reverse_proxy_miss_action"],
 		)
 	}
+	if body["default_platform_regex_filter_invert"] != cp.EnvCfg.DefaultPlatformRegexFilterInvert {
+		t.Fatalf(
+			"default_platform_regex_filter_invert: got %v, want %v",
+			body["default_platform_regex_filter_invert"],
+			cp.EnvCfg.DefaultPlatformRegexFilterInvert,
+		)
+	}
 	if body["default_platform_region_filter_invert"] != cp.EnvCfg.DefaultPlatformRegionFilterInvert {
 		t.Fatalf(
 			"default_platform_region_filter_invert: got %v, want %v",
@@ -1492,8 +1499,10 @@ func TestAPIContract_PreviewFilterUsesPaginationEnvelope(t *testing.T) {
 		"/api/v1/platforms/preview-filter?limit=5&offset=1",
 		map[string]any{
 			"platform_spec": map[string]any{
-				"regex_filters":  []string{},
-				"region_filters": []string{},
+				"regex_filters":        []string{},
+				"regex_filter_invert":  true,
+				"region_filters":       []string{},
+				"region_filter_invert": true,
 			},
 		},
 		true,

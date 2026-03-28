@@ -137,6 +137,36 @@ func TestPlatform_EvaluateNode_RegexFilter(t *testing.T) {
 	}
 }
 
+func TestPlatform_EvaluateNode_RegexFilterInvert(t *testing.T) {
+	regexes := []*regexp.Regexp{regexp.MustCompile("^jp")}
+	p := NewPlatform("p1", "Test", regexes, nil, true, false)
+	h := makeHash(`{"type":"ss"}`)
+	entry := makeFullyRoutableEntry(h, "sub1")
+
+	p.FullRebuild(func(fn func(node.Hash, *node.NodeEntry) bool) {
+		fn(h, entry)
+	}, alwaysLookup, usGeoLookup)
+	if p.View().Size() != 1 {
+		t.Fatal("regex invert should allow non-matching node")
+	}
+
+	p2 := NewPlatform("p2", "Test", []*regexp.Regexp{regexp.MustCompile("us")}, nil, true, false)
+	p2.FullRebuild(func(fn func(node.Hash, *node.NodeEntry) bool) {
+		fn(h, entry)
+	}, alwaysLookup, usGeoLookup)
+	if p2.View().Size() != 0 {
+		t.Fatal("regex invert should deny matching node")
+	}
+
+	p3 := NewPlatform("p3", "Test", nil, nil, true, false)
+	p3.FullRebuild(func(fn func(node.Hash, *node.NodeEntry) bool) {
+		fn(h, entry)
+	}, alwaysLookup, usGeoLookup)
+	if p3.View().Size() != 1 {
+		t.Fatal("regex invert should not affect when regex filters are empty")
+	}
+}
+
 func TestPlatform_EvaluateNode_RegionFilter(t *testing.T) {
 	p := NewPlatform("p1", "Test", nil, []string{"us"})
 	h := makeHash(`{"type":"ss"}`)

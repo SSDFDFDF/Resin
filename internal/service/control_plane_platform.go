@@ -29,6 +29,7 @@ type PlatformResponse struct {
 	ManualUnavailableAction          string   `json:"manual_unavailable_action"`
 	ManualUnavailableGrace           string   `json:"manual_unavailable_grace"`
 	RegexFilters                     []string `json:"regex_filters"`
+	RegexFilterInvert                bool     `json:"regex_filter_invert"`
 	RegionFilters                    []string `json:"region_filters"`
 	RegionFilterInvert               bool     `json:"region_filter_invert"`
 	RoutableNodeCount                int      `json:"routable_node_count"`
@@ -50,6 +51,7 @@ func platformToResponse(p model.Platform) PlatformResponse {
 		ManualUnavailableAction:          normalizeManualUnavailableAction(p.ManualUnavailableAction),
 		ManualUnavailableGrace:           time.Duration(normalizeManualUnavailableGraceNs(p.ManualUnavailableGraceNs)).String(),
 		RegexFilters:                     append([]string(nil), p.RegexFilters...),
+		RegexFilterInvert:                p.RegexFilterInvert,
 		RegionFilters:                    append([]string(nil), p.RegionFilters...),
 		RegionFilterInvert:               p.RegionFilterInvert,
 		RoutableNodeCount:                0,
@@ -80,6 +82,7 @@ type platformConfig struct {
 	ManualUnavailableAction          string
 	ManualUnavailableGraceNs         int64
 	RegexFilters                     []string
+	RegexFilterInvert                bool
 	RegionFilters                    []string
 	RegionFilterInvert               bool
 	ReverseProxyMissAction           string
@@ -126,6 +129,7 @@ func (s *ControlPlaneService) defaultPlatformConfig(name string) platformConfig 
 		ManualUnavailableAction:  string(platform.ManualUnavailableActionHold),
 		ManualUnavailableGraceNs: 0,
 		RegexFilters:             append([]string(nil), s.EnvCfg.DefaultPlatformRegexFilters...),
+		RegexFilterInvert:        s.EnvCfg.DefaultPlatformRegexFilterInvert,
 		RegionFilters:            append([]string(nil), s.EnvCfg.DefaultPlatformRegionFilters...),
 		RegionFilterInvert:       s.EnvCfg.DefaultPlatformRegionFilterInvert,
 		ReverseProxyMissAction:   s.EnvCfg.DefaultPlatformReverseProxyMissAction,
@@ -147,6 +151,7 @@ func platformConfigFromModel(mp model.Platform) platformConfig {
 		ManualUnavailableAction:          normalizeManualUnavailableAction(mp.ManualUnavailableAction),
 		ManualUnavailableGraceNs:         normalizeManualUnavailableGraceNs(mp.ManualUnavailableGraceNs),
 		RegexFilters:                     append([]string(nil), mp.RegexFilters...),
+		RegexFilterInvert:                mp.RegexFilterInvert,
 		RegionFilters:                    append([]string(nil), mp.RegionFilters...),
 		RegionFilterInvert:               mp.RegionFilterInvert,
 		ReverseProxyMissAction:           mp.ReverseProxyMissAction,
@@ -165,6 +170,7 @@ func (cfg platformConfig) toModel(id string, updatedAtNs int64) model.Platform {
 		ManualUnavailableAction:          cfg.ManualUnavailableAction,
 		ManualUnavailableGraceNs:         cfg.ManualUnavailableGraceNs,
 		RegexFilters:                     append([]string(nil), cfg.RegexFilters...),
+		RegexFilterInvert:                cfg.RegexFilterInvert,
 		RegionFilters:                    append([]string(nil), cfg.RegionFilters...),
 		RegionFilterInvert:               cfg.RegionFilterInvert,
 		ReverseProxyMissAction:           cfg.ReverseProxyMissAction,
@@ -193,6 +199,7 @@ func (cfg platformConfig) toRuntime(id string) (*platform.Platform, error) {
 		cfg.ReverseProxyEmptyAccountBehavior,
 		cfg.ReverseProxyFixedAccountHeader,
 		cfg.AllocationPolicy,
+		cfg.RegexFilterInvert,
 		cfg.RegionFilterInvert,
 	), nil
 }
@@ -424,6 +431,7 @@ type CreatePlatformRequest struct {
 	ManualUnavailableAction          *string  `json:"manual_unavailable_action"`
 	ManualUnavailableGrace           *string  `json:"manual_unavailable_grace"`
 	RegexFilters                     []string `json:"regex_filters"`
+	RegexFilterInvert                *bool    `json:"regex_filter_invert"`
 	RegionFilters                    []string `json:"region_filters"`
 	RegionFilterInvert               *bool    `json:"region_filter_invert"`
 	ReverseProxyMissAction           *string  `json:"reverse_proxy_miss_action"`
@@ -481,6 +489,9 @@ func (s *ControlPlaneService) CreatePlatform(req CreatePlatformRequest) (*Platfo
 	}
 	if req.RegexFilters != nil {
 		cfg.RegexFilters = req.RegexFilters
+	}
+	if req.RegexFilterInvert != nil {
+		cfg.RegexFilterInvert = *req.RegexFilterInvert
 	}
 	if req.RegionFilters != nil {
 		cfg.RegionFilters = req.RegionFilters
@@ -603,6 +614,11 @@ func (s *ControlPlaneService) UpdatePlatform(id string, patchJSON json.RawMessag
 	} else if ok {
 		cfg.RegexFilters = filters
 	}
+	if invert, ok, err := patch.optionalBool("regex_filter_invert"); err != nil {
+		return nil, err
+	} else if ok {
+		cfg.RegexFilterInvert = invert
+	}
 
 	regionFiltersPatched := false
 	if filters, ok, err := patch.optionalStringSlice("region_filters"); err != nil {
@@ -720,6 +736,7 @@ type PreviewFilterRequest struct {
 
 type PlatformSpecFilter struct {
 	RegexFilters       []string `json:"regex_filters"`
+	RegexFilterInvert  bool     `json:"regex_filter_invert"`
 	RegionFilters      []string `json:"region_filters"`
 	RegionFilterInvert bool     `json:"region_filter_invert"`
 }
@@ -852,7 +869,10 @@ func (s *ControlPlaneService) PreviewFilter(req PreviewFilterRequest) ([]NodeSum
 		}
 		regexFilters = plat.RegexFilters
 		regionFilters = plat.RegionFilters
-		req.PlatformSpec = &PlatformSpecFilter{RegionFilterInvert: plat.RegionFilterInvert}
+		req.PlatformSpec = &PlatformSpecFilter{
+			RegexFilterInvert:  plat.RegexFilterInvert,
+			RegionFilterInvert: plat.RegionFilterInvert,
+		}
 	} else {
 		compiled, err := platform.CompileRegexFilters(req.PlatformSpec.RegexFilters)
 		if err != nil {
@@ -879,7 +899,11 @@ func (s *ControlPlaneService) PreviewFilter(req PreviewFilterRequest) ([]NodeSum
 
 	var result []NodeSummary
 	s.Pool.Range(func(h node.Hash, entry *node.NodeEntry) bool {
-		if !entry.MatchRegexs(regexFilters, subLookup) {
+		regexMatched := entry.MatchRegexs(regexFilters, subLookup)
+		if len(regexFilters) > 0 && req.PlatformSpec.RegexFilterInvert {
+			regexMatched = !regexMatched
+		}
+		if !regexMatched {
 			return true
 		}
 		if len(regionFilterSet) > 0 {

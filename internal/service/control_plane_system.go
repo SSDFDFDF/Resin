@@ -97,6 +97,7 @@ var platformPatchAllowedFields = map[string]bool{
 	"manual_unavailable_action":            true,
 	"manual_unavailable_grace":             true,
 	"regex_filters":                        true,
+	"regex_filter_invert":                 true,
 	"region_filters":                       true,
 	"region_filter_invert":                 true,
 	"reverse_proxy_miss_action":            true,

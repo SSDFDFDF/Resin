@@ -462,6 +462,7 @@ func TestCreatePlatform_BuildsRoutableViewBeforePublish(t *testing.T) {
 		EnvCfg: &config.EnvConfig{
 			DefaultPlatformStickyTTL:              30 * time.Minute,
 			DefaultPlatformRegexFilters:           []string{},
+			DefaultPlatformRegexFilterInvert:      true,
 			DefaultPlatformRegionFilters:          []string{},
 			DefaultPlatformRegionFilterInvert:     true,
 			DefaultPlatformReverseProxyMissAction: "TREAT_AS_EMPTY",
@@ -484,6 +485,12 @@ func TestCreatePlatform_BuildsRoutableViewBeforePublish(t *testing.T) {
 	}
 	if !plat.View().Contains(hash) {
 		t.Fatalf("new platform view should contain seeded hash %s", hash.Hex())
+	}
+	if !created.RegexFilterInvert {
+		t.Fatal("created platform should inherit default regex_filter_invert")
+	}
+	if !plat.RegexFilterInvert {
+		t.Fatal("runtime platform should inherit default regex_filter_invert")
 	}
 	if !created.RegionFilterInvert {
 		t.Fatal("created platform should inherit default region_filter_invert")
@@ -522,6 +529,7 @@ func TestCreatePlatform_RejectsReservedAPIName(t *testing.T) {
 		EnvCfg: &config.EnvConfig{
 			DefaultPlatformStickyTTL:              30 * time.Minute,
 			DefaultPlatformRegexFilters:           []string{},
+			DefaultPlatformRegexFilterInvert:      false,
 			DefaultPlatformRegionFilters:          []string{},
 			DefaultPlatformReverseProxyMissAction: "TREAT_AS_EMPTY",
 			DefaultPlatformAllocationPolicy:       "BALANCED",
@@ -573,6 +581,7 @@ func TestCreatePlatform_RegionFilterInvert(t *testing.T) {
 		EnvCfg: &config.EnvConfig{
 			DefaultPlatformStickyTTL:              30 * time.Minute,
 			DefaultPlatformRegexFilters:           []string{},
+			DefaultPlatformRegexFilterInvert:      false,
 			DefaultPlatformRegionFilters:          []string{},
 			DefaultPlatformReverseProxyMissAction: "TREAT_AS_EMPTY",
 			DefaultPlatformAllocationPolicy:       "BALANCED",
@@ -589,6 +598,9 @@ func TestCreatePlatform_RegionFilterInvert(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreatePlatform: %v", err)
 	}
+	if created.RegexFilterInvert {
+		t.Fatal("response regex_filter_invert should be false")
+	}
 	if !created.RegionFilterInvert {
 		t.Fatal("response region_filter_invert should be true")
 	}
@@ -597,6 +609,9 @@ func TestCreatePlatform_RegionFilterInvert(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetPlatform: %v", err)
 	}
+	if stored.RegexFilterInvert {
+		t.Fatal("stored regex_filter_invert should be false")
+	}
 	if !stored.RegionFilterInvert {
 		t.Fatal("stored region_filter_invert should be true")
 	}
@@ -604,6 +619,9 @@ func TestCreatePlatform_RegionFilterInvert(t *testing.T) {
 	plat, ok := pool.GetPlatform(created.ID)
 	if !ok {
 		t.Fatalf("platform %s was not registered in pool", created.ID)
+	}
+	if plat.RegexFilterInvert {
+		t.Fatal("runtime regex_filter_invert should be false")
 	}
 	if !plat.RegionFilterInvert {
 		t.Fatal("runtime region_filter_invert should be true")
@@ -639,6 +657,7 @@ func TestCreatePlatform_ManualStickyConfigRoundTrips(t *testing.T) {
 		EnvCfg: &config.EnvConfig{
 			DefaultPlatformStickyTTL:              30 * time.Minute,
 			DefaultPlatformRegexFilters:           []string{},
+			DefaultPlatformRegexFilterInvert:      false,
 			DefaultPlatformRegionFilters:          []string{},
 			DefaultPlatformReverseProxyMissAction: "TREAT_AS_EMPTY",
 			DefaultPlatformAllocationPolicy:       "BALANCED",
@@ -1052,6 +1071,8 @@ func TestDeletePlatform_DoesNotDecodeCorruptPersistedFiltersJSON(t *testing.T) {
 		string(platform.ReverseProxyEmptyAccountBehaviorAccountHeaderRule),
 		"",
 		platformRow.AllocationPolicy,
+		false,
+		false,
 	))
 
 	cp := &ControlPlaneService{
@@ -1117,6 +1138,8 @@ func TestResetPlatformToDefault_SupportsBuiltInDefaultPlatform(t *testing.T) {
 		string(platform.ReverseProxyEmptyAccountBehaviorAccountHeaderRule),
 		"",
 		defaultRow.AllocationPolicy,
+		false,
+		false,
 	))
 
 	cp := &ControlPlaneService{
@@ -1125,6 +1148,7 @@ func TestResetPlatformToDefault_SupportsBuiltInDefaultPlatform(t *testing.T) {
 		EnvCfg: &config.EnvConfig{
 			DefaultPlatformStickyTTL:              45 * time.Minute,
 			DefaultPlatformRegexFilters:           []string{"^prod-"},
+			DefaultPlatformRegexFilterInvert:      true,
 			DefaultPlatformRegionFilters:          []string{"jp"},
 			DefaultPlatformRegionFilterInvert:     true,
 			DefaultPlatformReverseProxyMissAction: string(platform.ReverseProxyMissActionReject),
@@ -1150,6 +1174,9 @@ func TestResetPlatformToDefault_SupportsBuiltInDefaultPlatform(t *testing.T) {
 	}
 	if !reflect.DeepEqual(resp.RegionFilters, []string{"jp"}) {
 		t.Fatalf("response region_filters = %v, want %v", resp.RegionFilters, []string{"jp"})
+	}
+	if !resp.RegexFilterInvert {
+		t.Fatal("response regex_filter_invert should be true")
 	}
 	if !resp.RegionFilterInvert {
 		t.Fatal("response region_filter_invert should be true")
@@ -1177,6 +1204,9 @@ func TestResetPlatformToDefault_SupportsBuiltInDefaultPlatform(t *testing.T) {
 	if !reflect.DeepEqual(stored.RegionFilters, []string{"jp"}) {
 		t.Fatalf("stored region_filters = %v, want %v", stored.RegionFilters, []string{"jp"})
 	}
+	if !stored.RegexFilterInvert {
+		t.Fatal("stored regex_filter_invert should be true")
+	}
 	if !stored.RegionFilterInvert {
 		t.Fatal("stored region_filter_invert should be true")
 	}
@@ -1202,6 +1232,9 @@ func TestResetPlatformToDefault_SupportsBuiltInDefaultPlatform(t *testing.T) {
 	}
 	if !reflect.DeepEqual(plat.RegionFilters, []string{"jp"}) {
 		t.Fatalf("pool region_filters = %v, want %v", plat.RegionFilters, []string{"jp"})
+	}
+	if !plat.RegexFilterInvert {
+		t.Fatal("pool regex_filter_invert should be true")
 	}
 	if !plat.RegionFilterInvert {
 		t.Fatal("pool region_filter_invert should be true")
@@ -1271,6 +1304,8 @@ func TestResetPlatformToDefault_DoesNotDecodeCorruptPersistedFiltersJSON(t *test
 		string(platform.ReverseProxyEmptyAccountBehaviorAccountHeaderRule),
 		"",
 		platformRow.AllocationPolicy,
+		false,
+		false,
 	))
 
 	cp := &ControlPlaneService{
@@ -1279,6 +1314,7 @@ func TestResetPlatformToDefault_DoesNotDecodeCorruptPersistedFiltersJSON(t *test
 		EnvCfg: &config.EnvConfig{
 			DefaultPlatformStickyTTL:              45 * time.Minute,
 			DefaultPlatformRegexFilters:           []string{"^prod-"},
+			DefaultPlatformRegexFilterInvert:      true,
 			DefaultPlatformRegionFilters:          []string{"jp"},
 			DefaultPlatformRegionFilterInvert:     true,
 			DefaultPlatformReverseProxyMissAction: "REJECT",
@@ -1301,6 +1337,9 @@ func TestResetPlatformToDefault_DoesNotDecodeCorruptPersistedFiltersJSON(t *test
 	}
 	if !reflect.DeepEqual(resp.RegionFilters, []string{"jp"}) {
 		t.Fatalf("response region_filters = %v, want %v", resp.RegionFilters, []string{"jp"})
+	}
+	if !resp.RegexFilterInvert {
+		t.Fatal("response regex_filter_invert should be true")
 	}
 	if !resp.RegionFilterInvert {
 		t.Fatal("response region_filter_invert should be true")
@@ -1367,6 +1406,7 @@ func TestResetPlatformToDefault_InvalidPersistedPlatformNameReturnsInvalidArgume
 		EnvCfg: &config.EnvConfig{
 			DefaultPlatformStickyTTL:              45 * time.Minute,
 			DefaultPlatformRegexFilters:           []string{"^prod-"},
+			DefaultPlatformRegexFilterInvert:      false,
 			DefaultPlatformRegionFilters:          []string{"jp"},
 			DefaultPlatformReverseProxyMissAction: "REJECT",
 			DefaultPlatformAllocationPolicy:       "PREFER_IDLE_IP",

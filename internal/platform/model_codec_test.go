@@ -18,6 +18,7 @@ func TestBuildFromModel_Success(t *testing.T) {
 		ManualUnavailableAction:          "AUTO_CLEAN",
 		ManualUnavailableGraceNs:         int64(45 * time.Second),
 		RegexFilters:                     []string{`^us-.*$`},
+		RegexFilterInvert:                true,
 		RegionFilters:                    []string{"us", "jp"},
 		RegionFilterInvert:               true,
 		ReverseProxyMissAction:           "REJECT",
@@ -72,6 +73,9 @@ func TestBuildFromModel_Success(t *testing.T) {
 	}
 	if len(plat.RegexFilters) != 1 || !plat.RegexFilters[0].MatchString("us-node") {
 		t.Fatalf("regex filters not compiled as expected: %+v", plat.RegexFilters)
+	}
+	if !plat.RegexFilterInvert {
+		t.Fatal("regex filter invert should be enabled")
 	}
 	if len(plat.RegionFilters) != 2 || plat.RegionFilters[0] != "us" || plat.RegionFilters[1] != "jp" {
 		t.Fatalf("region filters mismatch: %+v", plat.RegionFilters)

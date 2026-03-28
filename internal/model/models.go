@@ -12,6 +12,7 @@ type Platform struct {
 	ManualUnavailableAction          string `json:"manual_unavailable_action"`
 	ManualUnavailableGraceNs         int64  `json:"manual_unavailable_grace_ns"`
 	RegexFilters                     []string
+	RegexFilterInvert                bool
 	RegionFilters                    []string
 	RegionFilterInvert               bool
 	ReverseProxyMissAction           string `json:"reverse_proxy_miss_action"`

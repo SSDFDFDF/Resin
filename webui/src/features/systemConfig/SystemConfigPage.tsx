@@ -209,6 +209,10 @@ function displayRegionFilterMode(invert: boolean): string {
   return invert ? "排除匹配地区（黑名单）" : "仅允许匹配地区（白名单）";
 }
 
+function displayRegexFilterMode(invert: boolean): string {
+  return invert ? "排除匹配正则（黑名单）" : "仅允许匹配正则（白名单）";
+}
+
 function arrayEquals(a: string[], b: string[]): boolean {
   if (a.length !== b.length) {
     return false;
@@ -862,16 +866,24 @@ export function SystemConfigPage() {
                       />
                     </div>
                     <div className="field-group field-span-2">
+                      <label className="field-label" style={{ margin: 0 }}>{t("默认正则过滤模式")}</label>
+                      <Input
+                        readOnly
+                        disabled
+                        value={t(displayRegexFilterMode(envBaseline.default_platform_regex_filter_invert))}
+                      />
+                    </div>
+                    <div className="field-group field-span-2">
+                      <label className="field-label" style={{ margin: 0 }}>{t("默认正则过滤规则")}</label>
+                      <Textarea readOnly disabled rows={3} value={envBaseline.default_platform_regex_filters?.join("\n") || t("无")} />
+                    </div>
+                    <div className="field-group field-span-2">
                       <label className="field-label" style={{ margin: 0 }}>{t("默认地区过滤模式")}</label>
                       <Input
                         readOnly
                         disabled
                         value={t(displayRegionFilterMode(envBaseline.default_platform_region_filter_invert))}
                       />
-                    </div>
-                    <div className="field-group field-span-2">
-                      <label className="field-label" style={{ margin: 0 }}>{t("默认正则黑名单")}</label>
-                      <Textarea readOnly disabled rows={3} value={envBaseline.default_platform_regex_filters?.join("\n") || t("无")} />
                     </div>
                     <div className="field-group field-span-2">
                       <label className="field-label" style={{ margin: 0 }}>{t("默认地区过滤规则")}</label>

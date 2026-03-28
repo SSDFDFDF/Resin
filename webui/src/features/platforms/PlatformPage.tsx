@@ -1,7 +1,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Info, Plus, RefreshCw, Search, Sparkles } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useNavigate } from "react-router-dom";
 import { Badge } from "../../components/ui/Badge";
@@ -17,6 +17,7 @@ import { useToast } from "../../hooks/useToast";
 import { useI18n } from "../../i18n";
 import { formatApiErrorMessage } from "../../lib/error-message";
 import { formatGoDuration, formatRelativeTime } from "../../lib/time";
+import { getEnvConfig } from "../systemConfig/api";
 import { createPlatform, listPlatforms } from "./api";
 import {
   allocationPolicies,
@@ -33,6 +34,7 @@ import {
 import {
   defaultPlatformFormValues,
   platformFormSchema,
+  platformFormValuesFromEnvConfig,
   platformNameRuleHint,
   toPlatformCreateInput,
   type PlatformFormValues,
@@ -72,12 +74,23 @@ export function PlatformPage() {
     refetchInterval: 30_000,
     placeholderData: (prev) => prev,
   });
+  const envConfigQuery = useQuery({
+    queryKey: ["system", "config", "env"],
+    queryFn: getEnvConfig,
+    staleTime: 60_000,
+  });
 
   const platforms = platformsQuery.data?.items ?? EMPTY_PLATFORMS;
 
   const totalPlatforms = platformsQuery.data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalPlatforms / pageSize));
   const currentPage = Math.min(page, totalPages - 1);
+
+  const envCreateDefaults = useMemo(
+    () => (envConfigQuery.data ? platformFormValuesFromEnvConfig(envConfigQuery.data) : null),
+    [envConfigQuery.data],
+  );
+  const [createDefaults, setCreateDefaults] = useState<PlatformFormValues | null>(null);
 
   const createForm = useForm<PlatformFormValues>({
     resolver: zodResolver(platformFormSchema),
@@ -86,12 +99,22 @@ export function PlatformPage() {
   const createEmptyAccountBehavior = createForm.watch("reverse_proxy_empty_account_behavior");
   const createStickyLeaseMode = createForm.watch("sticky_lease_mode");
 
+  useEffect(() => {
+    if (!envCreateDefaults) {
+      return;
+    }
+    setCreateDefaults((current) => current ?? envCreateDefaults);
+  }, [envCreateDefaults]);
+
   const createMutation = useMutation({
     mutationFn: createPlatform,
     onSuccess: async (created) => {
       await queryClient.invalidateQueries({ queryKey: ["platforms"] });
       setCreateModalOpen(false);
-      createForm.reset();
+      if (envCreateDefaults) {
+        setCreateDefaults(envCreateDefaults);
+        createForm.reset(envCreateDefaults);
+      }
       showToast("success", t("平台 {{name}} 创建成功", { name: created.name }));
       navigate(`/platforms/${created.id}`);
     },
@@ -101,7 +124,10 @@ export function PlatformPage() {
   });
 
   const onCreateSubmit = createForm.handleSubmit(async (values) => {
-    await createMutation.mutateAsync(toPlatformCreateInput(values));
+    if (!createDefaults) {
+      return;
+    }
+    await createMutation.mutateAsync(toPlatformCreateInput(values, createDefaults));
   });
 
   const changePageSize = (next: number) => {
@@ -143,7 +169,15 @@ export function PlatformPage() {
             <Button
               variant="secondary"
               size="sm"
-              onClick={() => setCreateModalOpen(true)}
+              onClick={() => {
+                if (!envCreateDefaults) {
+                  return;
+                }
+                setCreateDefaults(envCreateDefaults);
+                createForm.reset(envCreateDefaults);
+                setCreateModalOpen(true);
+              }}
+              disabled={!envCreateDefaults}
             >
               <Plus size={16} />
               {t("新建")}
@@ -395,6 +429,10 @@ export function PlatformPage() {
                   placeholder={t("每行一条，例如 .*专线.* 或 <订阅名>/.*")}
                   {...createForm.register("regex_filters_text")}
                 />
+                <label className="subscription-inline-filter" htmlFor="create-regex-filter-invert" style={{ marginTop: 8 }}>
+                  <Switch id="create-regex-filter-invert" {...createForm.register("regex_filter_invert")} />
+                  <span>{t("反向过滤：排除匹配这些正则的节点")}</span>
+                </label>
                 <p className="muted" style={{ marginTop: 4, fontSize: 12 }}>
                   {t("技巧：<订阅名>/.* 可筛选来自该订阅的节点。")}
                 </p>
@@ -412,7 +450,7 @@ export function PlatformPage() {
               </div>
 
               <div className="detail-actions">
-                <Button type="submit" disabled={createMutation.isPending}>
+                <Button type="submit" disabled={createMutation.isPending || !createDefaults}>
                   {createMutation.isPending ? t("创建中...") : t("确认创建")}
                 </Button>
                 <Button variant="secondary" onClick={() => setCreateModalOpen(false)}>

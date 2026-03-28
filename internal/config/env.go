@@ -34,6 +34,7 @@ type EnvConfig struct {
 	GeoIPUpdateSchedule                             string
 	DefaultPlatformStickyTTL                        time.Duration
 	DefaultPlatformRegexFilters                     []string
+	DefaultPlatformRegexFilterInvert                bool
 	DefaultPlatformRegionFilters                    []string
 	DefaultPlatformRegionFilterInvert               bool
 	DefaultPlatformReverseProxyMissAction           string
@@ -92,6 +93,7 @@ func LoadEnvConfig() (*EnvConfig, error) {
 	cfg.GeoIPUpdateSchedule = envStr("RESIN_GEOIP_UPDATE_SCHEDULE", "0 7 * * *")
 	cfg.DefaultPlatformStickyTTL = envDuration("RESIN_DEFAULT_PLATFORM_STICKY_TTL", 7*24*time.Hour, &errs)
 	cfg.DefaultPlatformRegexFilters = envStringSlice("RESIN_DEFAULT_PLATFORM_REGEX_FILTERS", []string{}, &errs)
+	cfg.DefaultPlatformRegexFilterInvert = envBool("RESIN_DEFAULT_PLATFORM_REGEX_FILTER_INVERT", false, &errs)
 	cfg.DefaultPlatformRegionFilters = envStringSlice("RESIN_DEFAULT_PLATFORM_REGION_FILTERS", []string{}, &errs)
 	cfg.DefaultPlatformRegionFilterInvert = envBool("RESIN_DEFAULT_PLATFORM_REGION_FILTER_INVERT", false, &errs)
 	cfg.DefaultPlatformReverseProxyMissAction = envStr(
@@ -226,6 +228,9 @@ func LoadEnvConfig() (*EnvConfig, error) {
 		if _, err := regexp.Compile(pattern); err != nil {
 			errs = append(errs, fmt.Sprintf("RESIN_DEFAULT_PLATFORM_REGEX_FILTERS: invalid regex %q: %v", pattern, err))
 		}
+	}
+	if cfg.DefaultPlatformRegexFilterInvert && len(cfg.DefaultPlatformRegexFilters) == 0 {
+		errs = append(errs, "RESIN_DEFAULT_PLATFORM_REGEX_FILTER_INVERT requires RESIN_DEFAULT_PLATFORM_REGEX_FILTERS to be non-empty")
 	}
 	for _, region := range cfg.DefaultPlatformRegionFilters {
 		if !isLowerAlpha2(region) {

@@ -31,6 +31,7 @@ type Platform struct {
 
 	// Filter configuration.
 	RegexFilters       []*regexp.Regexp
+	RegexFilterInvert  bool
 	RegionFilters      []string // lowercase ISO codes
 	RegionFilterInvert bool
 
@@ -52,17 +53,30 @@ type Platform struct {
 }
 
 // NewPlatform creates a Platform with an empty routable view.
-func NewPlatform(id, name string, regexFilters []*regexp.Regexp, regionFilters []string, regionFilterInvert ...bool) *Platform {
-	invert := false
-	if len(regionFilterInvert) > 0 {
-		invert = regionFilterInvert[0]
+// Optional args: (regexFilterInvert, regionFilterInvert).
+// For backward compatibility with older call sites, a single optional bool
+// is treated as regionFilterInvert.
+func NewPlatform(
+	id, name string,
+	regexFilters []*regexp.Regexp,
+	regionFilters []string,
+	invertOpts ...bool,
+) *Platform {
+	regexFilterInvert := false
+	regionFilterInvert := false
+	if len(invertOpts) == 1 {
+		regionFilterInvert = invertOpts[0]
+	} else if len(invertOpts) >= 2 {
+		regexFilterInvert = invertOpts[0]
+		regionFilterInvert = invertOpts[1]
 	}
 	return &Platform{
 		ID:                 id,
 		Name:               name,
 		RegexFilters:       regexFilters,
+		RegexFilterInvert:  regexFilterInvert,
 		RegionFilters:      regionFilters,
-		RegionFilterInvert: invert,
+		RegionFilterInvert: regionFilterInvert,
 		view:               NewRoutableView(),
 	}
 }
@@ -134,7 +148,11 @@ func (p *Platform) evaluateNode(
 	}
 
 	// 2. Tag regex match.
-	if !entry.MatchRegexs(p.RegexFilters, subLookup) {
+	regexMatched := entry.MatchRegexs(p.RegexFilters, subLookup)
+	if len(p.RegexFilters) > 0 && p.RegexFilterInvert {
+		regexMatched = !regexMatched
+	}
+	if !regexMatched {
 		return false
 	}
 

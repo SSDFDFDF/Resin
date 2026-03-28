@@ -3,13 +3,14 @@ import type { PageResponse, Platform, PlatformCreateInput, PlatformUpdateInput }
 
 const basePath = "/api/v1/platforms";
 
-type ApiPlatform = Omit<Platform, "regex_filters" | "region_filters"> & {
+type ApiPlatform = Omit<Platform, "regex_filters" | "regex_filter_invert" | "region_filters" | "region_filter_invert"> & {
   regex_filters?: string[] | null;
+  regex_filter_invert?: boolean | null;
   region_filters?: string[] | null;
+  region_filter_invert?: boolean | null;
   sticky_lease_mode?: Platform["sticky_lease_mode"] | null;
   manual_unavailable_action?: Platform["manual_unavailable_action"] | null;
   manual_unavailable_grace?: string | null;
-  region_filter_invert?: boolean | null;
   routable_node_count?: number | null;
   reverse_proxy_miss_action?: Platform["reverse_proxy_miss_action"] | null;
   reverse_proxy_empty_account_behavior?: Platform["reverse_proxy_empty_account_behavior"] | null;
@@ -31,6 +32,7 @@ function normalizePlatform(raw: ApiPlatform): Platform {
     manual_unavailable_action: raw.manual_unavailable_action === "AUTO_CLEAN" ? "AUTO_CLEAN" : "HOLD",
     manual_unavailable_grace: typeof raw.manual_unavailable_grace === "string" ? raw.manual_unavailable_grace : "0s",
     regex_filters: Array.isArray(raw.regex_filters) ? raw.regex_filters : [],
+    regex_filter_invert: raw.regex_filter_invert === true,
     region_filters: Array.isArray(raw.region_filters) ? raw.region_filters : [],
     region_filter_invert: raw.region_filter_invert === true,
     routable_node_count: typeof raw.routable_node_count === "number" ? raw.routable_node_count : 0,

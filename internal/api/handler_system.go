@@ -20,6 +20,7 @@ type systemEnvConfigResponse struct {
 	GeoIPUpdateSchedule                             string          `json:"geoip_update_schedule"`
 	DefaultPlatformStickyTTL                        config.Duration `json:"default_platform_sticky_ttl"`
 	DefaultPlatformRegexFilters                     []string        `json:"default_platform_regex_filters"`
+	DefaultPlatformRegexFilterInvert                bool            `json:"default_platform_regex_filter_invert"`
 	DefaultPlatformRegionFilters                    []string        `json:"default_platform_region_filters"`
 	DefaultPlatformRegionFilterInvert               bool            `json:"default_platform_region_filter_invert"`
 	DefaultPlatformReverseProxyMissAction           string          `json:"default_platform_reverse_proxy_miss_action"`
@@ -117,6 +118,7 @@ func systemEnvConfigSnapshot(envCfg *config.EnvConfig) *systemEnvConfigResponse 
 		GeoIPUpdateSchedule:                   envCfg.GeoIPUpdateSchedule,
 		DefaultPlatformStickyTTL:              config.Duration(envCfg.DefaultPlatformStickyTTL),
 		DefaultPlatformRegexFilters:           append([]string(nil), envCfg.DefaultPlatformRegexFilters...),
+		DefaultPlatformRegexFilterInvert:      envCfg.DefaultPlatformRegexFilterInvert,
 		DefaultPlatformRegionFilters:          append([]string(nil), envCfg.DefaultPlatformRegionFilters...),
 		DefaultPlatformRegionFilterInvert:     envCfg.DefaultPlatformRegionFilterInvert,
 		DefaultPlatformReverseProxyMissAction: envCfg.DefaultPlatformReverseProxyMissAction,

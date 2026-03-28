@@ -275,6 +275,8 @@ const EXACT_ZH_TO_EN: Record<string, string> = {
     "Tip: use <SubscriptionName>/.* to match nodes from that subscription.",
   "满足所有正则表达式的节点才会被选择":
     "Only nodes that satisfy all regex expressions will be selected.",
+  "反向过滤：排除匹配这些正则的节点":
+    "Invert filter: exclude nodes matching these regex patterns",
   "每行一条，如 hk / us": "One per line, e.g. hk / us",
   "每行一个 header，例如 Authorization": "One header per line, e.g. Authorization",
   "输入地址查看命中规则和请求头。": "Enter URL to view matched rule and headers.",
@@ -408,7 +410,11 @@ const EXACT_ZH_TO_EN: Record<string, string> = {
   "默认节点分配策略": "Default node allocation policy",
   "默认平台回退规则": "Default platform fallback rule",
   "默认粘性会话 TTL": "Default sticky session TTL",
+  "默认正则过滤模式": "Default regex filter mode",
+  "默认正则过滤规则": "Default regex filter rules",
   "默认正则黑名单": "Default regex blacklist",
+  "默认地区过滤模式": "Default region filter mode",
+  "默认地区过滤规则": "Default region filter rules",
   "目录与端口": "Paths and ports",
   "平台 ID 缺失，无法加载详情。": "Platform ID is missing; unable to load details.",
   "平台实时租约数量": "Platform realtime lease count",

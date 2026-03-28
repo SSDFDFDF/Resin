@@ -12,6 +12,7 @@ export type Platform = {
   manual_unavailable_action: PlatformManualUnavailableAction;
   manual_unavailable_grace: string;
   regex_filters: string[];
+  regex_filter_invert: boolean;
   region_filters: string[];
   region_filter_invert: boolean;
   routable_node_count: number;
@@ -36,6 +37,7 @@ export type PlatformCreateInput = {
   manual_unavailable_action?: PlatformManualUnavailableAction;
   manual_unavailable_grace?: string;
   regex_filters?: string[];
+  regex_filter_invert?: boolean;
   region_filters?: string[];
   region_filter_invert?: boolean;
   reverse_proxy_miss_action?: PlatformMissAction;
@@ -51,6 +53,7 @@ export type PlatformUpdateInput = {
   manual_unavailable_action?: PlatformManualUnavailableAction;
   manual_unavailable_grace?: string;
   regex_filters?: string[];
+  regex_filter_invert?: boolean;
   region_filters?: string[];
   region_filter_invert?: boolean;
   reverse_proxy_miss_action?: PlatformMissAction;

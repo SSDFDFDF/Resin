@@ -499,6 +499,10 @@ export function PlatformDetailPage() {
                       placeholder={t("每行一条，例如 .*专线.* 或 <订阅名>/.*")}
                       {...editForm.register("regex_filters_text")}
                     />
+                    <label className="subscription-inline-filter" htmlFor="detail-edit-regex-filter-invert" style={{ marginTop: 8 }}>
+                      <Switch id="detail-edit-regex-filter-invert" {...editForm.register("regex_filter_invert")} />
+                      <span>{t("反向过滤：排除匹配这些正则的节点")}</span>
+                    </label>
                     <p className="muted" style={{ marginTop: 4, fontSize: 12 }}>
                       {t("技巧：<订阅名>/.* 可筛选来自该订阅的节点。")}
                     </p>

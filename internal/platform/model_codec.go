@@ -51,14 +51,15 @@ func NewConfiguredPlatform(
 	emptyAccountBehavior string,
 	fixedAccountHeader string,
 	allocationPolicy string,
-	regionFilterInvert ...bool,
+	regexFilterInvert bool,
+	regionFilterInvert bool,
 ) *Platform {
 	normalizedFixedHeaders, fixedHeaders, err := NormalizeFixedAccountHeaders(fixedAccountHeader)
 	if err != nil {
 		normalizedFixedHeaders = strings.TrimSpace(fixedAccountHeader)
 		fixedHeaders = nil
 	}
-	plat := NewPlatform(id, name, regexFilters, regionFilters, regionFilterInvert...)
+	plat := NewPlatform(id, name, regexFilters, regionFilters, regexFilterInvert, regionFilterInvert)
 	plat.StickyTTLNs = stickyTTLNs
 	plat.StickyLeaseMode = string(NormalizeStickyLeaseMode(stickyLeaseMode))
 	plat.ManualUnavailableAction = string(NormalizeManualUnavailableAction(manualUnavailableAction))
@@ -149,6 +150,7 @@ func BuildFromModel(mp model.Platform) (*Platform, error) {
 		emptyAccountBehavior,
 		fixedHeader,
 		mp.AllocationPolicy,
+		mp.RegexFilterInvert,
 		mp.RegionFilterInvert,
 	), nil
 }

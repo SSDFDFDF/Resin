@@ -107,8 +107,8 @@ func TestMigrateStateDB_LegacyBaselineAdvancesToLatest(t *testing.T) {
 	if dirty {
 		t.Fatalf("schema_migrations dirty=true")
 	}
-	if version != stateVersionAddStickyLeaseControls {
-		t.Fatalf("schema_migrations version: got %d, want %d", version, stateVersionAddStickyLeaseControls)
+	if version != stateVersionAddRegexFilterInvert {
+		t.Fatalf("schema_migrations version: got %d, want %d", version, stateVersionAddRegexFilterInvert)
 	}
 }
 
@@ -179,8 +179,8 @@ func TestMigrateStateDB_NormalizesLegacyRandomMissAction(t *testing.T) {
 	if dirty {
 		t.Fatalf("schema_migrations dirty=true")
 	}
-	if version != stateVersionAddStickyLeaseControls {
-		t.Fatalf("schema_migrations version: got %d, want %d", version, stateVersionAddStickyLeaseControls)
+	if version != stateVersionAddRegexFilterInvert {
+		t.Fatalf("schema_migrations version: got %d, want %d", version, stateVersionAddRegexFilterInvert)
 	}
 }
 
@@ -243,7 +243,7 @@ func TestStateRepo_Platforms_CRUD(t *testing.T) {
 		StickyLeaseMode:          string(platform.StickyLeaseModeManual),
 		ManualUnavailableAction:  string(platform.ManualUnavailableActionAutoClean),
 		ManualUnavailableGraceNs: int64(15 * time.Second),
-		RegexFilters:             []string{}, RegionFilters: []string{}, RegionFilterInvert: true,
+		RegexFilters:             []string{}, RegexFilterInvert: true, RegionFilters: []string{}, RegionFilterInvert: true,
 		ReverseProxyMissAction: "TREAT_AS_EMPTY", AllocationPolicy: "BALANCED",
 		UpdatedAtNs: now,
 	}
@@ -264,6 +264,9 @@ func TestStateRepo_Platforms_CRUD(t *testing.T) {
 			got.ReverseProxyEmptyAccountBehavior,
 			"RANDOM",
 		)
+	}
+	if !got.RegexFilterInvert {
+		t.Fatal("expected regex_filter_invert to round-trip as true")
 	}
 	if !got.RegionFilterInvert {
 		t.Fatal("expected region_filter_invert to round-trip as true")
@@ -289,6 +292,9 @@ func TestStateRepo_Platforms_CRUD(t *testing.T) {
 	}
 	if len(list) != 1 || list[0].Name != "Default" {
 		t.Fatalf("unexpected list: %+v", list)
+	}
+	if !list[0].RegexFilterInvert {
+		t.Fatal("expected listed platform to keep regex_filter_invert")
 	}
 	if !list[0].RegionFilterInvert {
 		t.Fatal("expected listed platform to keep region_filter_invert")

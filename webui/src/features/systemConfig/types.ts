@@ -30,6 +30,7 @@ export type EnvConfig = {
   geoip_update_schedule: string;
   default_platform_sticky_ttl: string;
   default_platform_regex_filters: string[] | null;
+  default_platform_regex_filter_invert: boolean;
   default_platform_region_filters: string[] | null;
   default_platform_region_filter_invert: boolean;
   default_platform_reverse_proxy_miss_action: string;

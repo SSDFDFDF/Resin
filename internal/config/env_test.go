@@ -48,6 +48,7 @@ func TestLoadEnvConfig_Defaults(t *testing.T) {
 	assertEqual(t, "GeoIPUpdateSchedule", cfg.GeoIPUpdateSchedule, "0 7 * * *")
 	assertEqual(t, "DefaultPlatformStickyTTL", cfg.DefaultPlatformStickyTTL, 7*24*time.Hour)
 	assertEqual(t, "DefaultPlatformRegexFiltersLength", len(cfg.DefaultPlatformRegexFilters), 0)
+	assertEqual(t, "DefaultPlatformRegexFilterInvert", cfg.DefaultPlatformRegexFilterInvert, false)
 	assertEqual(t, "DefaultPlatformRegionFiltersLength", len(cfg.DefaultPlatformRegionFilters), 0)
 	assertEqual(t, "DefaultPlatformRegionFilterInvert", cfg.DefaultPlatformRegionFilterInvert, false)
 	assertEqual(t, "DefaultPlatformReverseProxyMissAction", cfg.DefaultPlatformReverseProxyMissAction, "TREAT_AS_EMPTY")
@@ -101,6 +102,7 @@ func TestLoadEnvConfig_EnvOverrides(t *testing.T) {
 	envs["RESIN_GEOIP_UPDATE_SCHEDULE"] = "0 0 * * *"
 	envs["RESIN_DEFAULT_PLATFORM_STICKY_TTL"] = "2h"
 	envs["RESIN_DEFAULT_PLATFORM_REGEX_FILTERS"] = `["^Provider/.*"]`
+	envs["RESIN_DEFAULT_PLATFORM_REGEX_FILTER_INVERT"] = "true"
 	envs["RESIN_DEFAULT_PLATFORM_REGION_FILTERS"] = `["us","hk"]`
 	envs["RESIN_DEFAULT_PLATFORM_REGION_FILTER_INVERT"] = "true"
 	envs["RESIN_DEFAULT_PLATFORM_REVERSE_PROXY_MISS_ACTION"] = "REJECT"
@@ -129,6 +131,7 @@ func TestLoadEnvConfig_EnvOverrides(t *testing.T) {
 	assertEqual(t, "DefaultPlatformStickyTTL", cfg.DefaultPlatformStickyTTL, 2*time.Hour)
 	assertEqual(t, "DefaultPlatformRegexFiltersLength", len(cfg.DefaultPlatformRegexFilters), 1)
 	assertEqual(t, "DefaultPlatformRegexFilters[0]", cfg.DefaultPlatformRegexFilters[0], "^Provider/.*")
+	assertEqual(t, "DefaultPlatformRegexFilterInvert", cfg.DefaultPlatformRegexFilterInvert, true)
 	assertEqual(t, "DefaultPlatformRegionFiltersLength", len(cfg.DefaultPlatformRegionFilters), 2)
 	assertEqual(t, "DefaultPlatformRegionFilters[0]", cfg.DefaultPlatformRegionFilters[0], "us")
 	assertEqual(t, "DefaultPlatformRegionFilters[1]", cfg.DefaultPlatformRegionFilters[1], "hk")
@@ -174,6 +177,18 @@ func TestLoadEnvConfig_DefaultPlatformFixedHeaderMultiline(t *testing.T) {
 		cfg.DefaultPlatformReverseProxyFixedAccountHeader,
 		"Authorization\nX-Account-Id",
 	)
+}
+
+func TestLoadEnvConfig_InvalidDefaultPlatformRegexFilterInvert(t *testing.T) {
+	envs := requiredEnvs()
+	envs["RESIN_DEFAULT_PLATFORM_REGEX_FILTER_INVERT"] = "not-a-bool"
+	setEnvs(t, envs)
+
+	_, err := LoadEnvConfig()
+	if err == nil {
+		t.Fatal("expected error for invalid RESIN_DEFAULT_PLATFORM_REGEX_FILTER_INVERT")
+	}
+	assertContains(t, err.Error(), `RESIN_DEFAULT_PLATFORM_REGEX_FILTER_INVERT: invalid boolean "not-a-bool"`)
 }
 
 func TestLoadEnvConfig_InvalidDefaultPlatformRegionFilterInvert(t *testing.T) {
@@ -522,6 +537,18 @@ func TestLoadEnvConfig_InvalidDefaultPlatformRegex(t *testing.T) {
 		t.Fatal("expected error for invalid default platform regex")
 	}
 	assertContains(t, err.Error(), "RESIN_DEFAULT_PLATFORM_REGEX_FILTERS")
+}
+
+func TestLoadEnvConfig_RegexFilterInvertRequiresFilters(t *testing.T) {
+	envs := requiredEnvs()
+	envs["RESIN_DEFAULT_PLATFORM_REGEX_FILTER_INVERT"] = "true"
+	setEnvs(t, envs)
+
+	_, err := LoadEnvConfig()
+	if err == nil {
+		t.Fatal("expected error for regex filter invert without filters")
+	}
+	assertContains(t, err.Error(), "RESIN_DEFAULT_PLATFORM_REGEX_FILTER_INVERT")
 }
 
 func TestLoadEnvConfig_InvalidProbeTimeout(t *testing.T) {
