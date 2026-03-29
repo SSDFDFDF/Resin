@@ -113,6 +113,7 @@ type Subscription struct {
 	url        string
 	sourceType string
 	content    string
+	userAgent  string
 	// updateIntervalNs is the configured subscription refresh interval.
 	updateIntervalNs int64
 	name             string
@@ -137,7 +138,7 @@ type Subscription struct {
 	managedNodes atomic.Pointer[ManagedNodes]
 
 	// configVersion is incremented whenever refresh-input-related config changes
-	// (URL/source/content/update-interval). Scheduler uses it for stale-guard.
+	// (URL/source/content/user-agent/update-interval). Scheduler uses it for stale-guard.
 	configVersion atomic.Int64
 }
 
@@ -194,6 +195,13 @@ func (s *Subscription) Content() string {
 	return s.content
 }
 
+// UserAgent returns the subscription request user agent override (thread-safe).
+func (s *Subscription) UserAgent() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.userAgent
+}
+
 // ConfigVersion returns the scheduler input config version.
 func (s *Subscription) ConfigVersion() int64 {
 	return s.configVersion.Load()
@@ -234,6 +242,16 @@ func (s *Subscription) SetContent(content string) {
 	s.mu.Lock()
 	if s.content != content {
 		s.content = content
+		s.configVersion.Add(1)
+	}
+	s.mu.Unlock()
+}
+
+// SetUserAgent updates the subscription request user agent override (thread-safe).
+func (s *Subscription) SetUserAgent(userAgent string) {
+	s.mu.Lock()
+	if s.userAgent != userAgent {
+		s.userAgent = userAgent
 		s.configVersion.Add(1)
 	}
 	s.mu.Unlock()

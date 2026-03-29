@@ -107,8 +107,8 @@ func TestMigrateStateDB_LegacyBaselineAdvancesToLatest(t *testing.T) {
 	if dirty {
 		t.Fatalf("schema_migrations dirty=true")
 	}
-	if version != stateVersionAddRegexFilterInvert {
-		t.Fatalf("schema_migrations version: got %d, want %d", version, stateVersionAddRegexFilterInvert)
+	if version != stateVersionAddSubscriptionUserAgent {
+		t.Fatalf("schema_migrations version: got %d, want %d", version, stateVersionAddSubscriptionUserAgent)
 	}
 }
 
@@ -179,8 +179,8 @@ func TestMigrateStateDB_NormalizesLegacyRandomMissAction(t *testing.T) {
 	if dirty {
 		t.Fatalf("schema_migrations dirty=true")
 	}
-	if version != stateVersionAddRegexFilterInvert {
-		t.Fatalf("schema_migrations version: got %d, want %d", version, stateVersionAddRegexFilterInvert)
+	if version != stateVersionAddSubscriptionUserAgent {
+		t.Fatalf("schema_migrations version: got %d, want %d", version, stateVersionAddSubscriptionUserAgent)
 	}
 }
 
@@ -492,7 +492,7 @@ func TestStateRepo_Subscriptions_CRUD(t *testing.T) {
 
 	s := model.Subscription{
 		ID: "sub-1", Name: "MySub", URL: "https://example.com/sub",
-		UpdateIntervalNs: int64(30 * time.Second), Enabled: true,
+		UserAgent: "Resin/test", UpdateIntervalNs: int64(30 * time.Second), Enabled: true,
 		Ephemeral: false, EphemeralNodeEvictDelayNs: int64(72 * time.Hour), CreatedAtNs: now, UpdatedAtNs: now,
 	}
 	if err := repo.UpsertSubscription(s); err != nil {
@@ -505,6 +505,9 @@ func TestStateRepo_Subscriptions_CRUD(t *testing.T) {
 	}
 	if len(list) != 1 || list[0].URL != "https://example.com/sub" {
 		t.Fatalf("unexpected list: %+v", list)
+	}
+	if list[0].UserAgent != "Resin/test" {
+		t.Fatalf("unexpected user_agent: %q", list[0].UserAgent)
 	}
 
 	// Update.
@@ -577,6 +580,7 @@ func TestStateRepo_Subscription_LocalSourcePersists(t *testing.T) {
 		SourceType:                "local",
 		URL:                       "",
 		Content:                   "vmess://example",
+		UserAgent:                 "",
 		UpdateIntervalNs:          int64(time.Hour),
 		Enabled:                   true,
 		Ephemeral:                 false,

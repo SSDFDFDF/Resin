@@ -29,6 +29,7 @@ type Subscription struct {
 	SourceType                string `json:"source_type"`
 	URL                       string `json:"url"`
 	Content                   string `json:"content"`
+	UserAgent                 string `json:"user_agent"`
 	UpdateIntervalNs          int64  `json:"update_interval_ns"`
 	Enabled                   bool   `json:"enabled"`
 	Ephemeral                 bool   `json:"ephemeral"`

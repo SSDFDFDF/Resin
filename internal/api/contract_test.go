@@ -72,7 +72,7 @@ func newControlPlaneTestServerWithBodyLimit(
 	scheduler := topology.NewSubscriptionScheduler(topology.SchedulerConfig{
 		SubManager: subMgr,
 		Pool:       pool,
-		Fetcher: func(string) ([]byte, error) {
+		Fetcher: func(string, string) ([]byte, error) {
 			return nil, errors.New("test fetcher failure")
 		},
 	})
@@ -1400,6 +1400,53 @@ func TestAPIContract_SubscriptionUpdateIntervalMinimum(t *testing.T) {
 	}, true)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("patch subscription invalid interval status: got %d, want %d, body=%s", rec.Code, http.StatusBadRequest, rec.Body.String())
+	}
+	assertErrorCode(t, rec, "INVALID_ARGUMENT")
+}
+
+func TestAPIContract_SubscriptionUserAgent_CreateAndPatch(t *testing.T) {
+	srv, _, _ := newControlPlaneTestServer(t)
+
+	createRec := doJSONRequest(t, srv, http.MethodPost, "/api/v1/subscriptions", map[string]any{
+		"name":       "ua-sub",
+		"url":        "https://example.com/sub-ua",
+		"user_agent": "Resin/dev",
+	}, true)
+	if createRec.Code != http.StatusCreated {
+		t.Fatalf("create subscription status: got %d, want %d, body=%s", createRec.Code, http.StatusCreated, createRec.Body.String())
+	}
+	createBody := decodeJSONMap(t, createRec)
+	subID, _ := createBody["id"].(string)
+	if subID == "" {
+		t.Fatalf("create subscription missing id: body=%s", createRec.Body.String())
+	}
+	if got, _ := createBody["user_agent"].(string); got != "Resin/dev" {
+		t.Fatalf("create subscription user_agent: got %q, want %q", got, "Resin/dev")
+	}
+
+	patchRec := doJSONRequest(t, srv, http.MethodPatch, "/api/v1/subscriptions/"+subID, map[string]any{
+		"user_agent": "sing-box",
+	}, true)
+	if patchRec.Code != http.StatusOK {
+		t.Fatalf("patch subscription status: got %d, want %d, body=%s", patchRec.Code, http.StatusOK, patchRec.Body.String())
+	}
+	patchBody := decodeJSONMap(t, patchRec)
+	if got, _ := patchBody["user_agent"].(string); got != "sing-box" {
+		t.Fatalf("patch subscription user_agent: got %q, want %q", got, "sing-box")
+	}
+}
+
+func TestAPIContract_SubscriptionUserAgent_RejectsLocalSource(t *testing.T) {
+	srv, _, _ := newControlPlaneTestServer(t)
+
+	rec := doJSONRequest(t, srv, http.MethodPost, "/api/v1/subscriptions", map[string]any{
+		"name":        "local-with-ua",
+		"source_type": "local",
+		"content":     "vmess://example",
+		"user_agent":  "Resin/dev",
+	}, true)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("create local subscription invalid user_agent status: got %d, want %d, body=%s", rec.Code, http.StatusBadRequest, rec.Body.String())
 	}
 	assertErrorCode(t, rec, "INVALID_ARGUMENT")
 }

@@ -38,11 +38,21 @@ const SUBSCRIPTION_SOURCE_TABS: Array<{ key: SubscriptionSourceType; label: stri
   { key: "local", label: "本地", hint: "直接填写订阅文本，不经过网络拉取" },
 ];
 
+const SUBSCRIPTION_USER_AGENT_PRESETS: Array<{ label: string; value: string; hint?: string }> = [
+  { label: "跟随系统", value: "", hint: "留空时继承系统配置中的 user_agent" },
+  { label: "sing-box", value: "sing-box" },
+  { label: "Mihomo", value: "Mihomo" },
+  { label: "Clash.Meta", value: "clash.meta" },
+  { label: "Clash Verge", value: "Clash Verge/1.7.7" },
+  { label: "Shadowrocket", value: "Shadowrocket/2495 CFNetwork/3826.500.131 Darwin/24.5.0" },
+] as const;
+
 const subscriptionCreateSchema = z.object({
   name: z.string().trim().min(1, "订阅名称不能为空"),
   source_type: z.enum(["remote", "local"]),
   url: z.string(),
   content: z.string(),
+  user_agent: z.string(),
   update_interval: z.string().trim().min(1, "更新间隔不能为空"),
   ephemeral_node_evict_delay: z.string().trim().min(1, "临时节点驱逐延迟不能为空"),
   enabled: z.boolean(),
@@ -89,6 +99,7 @@ function subscriptionToEditForm(subscription: Subscription): SubscriptionEditFor
     source_type: subscription.source_type,
     url: subscription.url,
     content: subscription.content ?? "",
+    user_agent: subscription.user_agent ?? "",
     update_interval: subscription.update_interval,
     ephemeral_node_evict_delay: subscription.ephemeral_node_evict_delay,
     enabled: subscription.enabled,
@@ -177,6 +188,7 @@ export function SubscriptionPage() {
       source_type: "remote",
       url: "",
       content: "",
+      user_agent: "",
       update_interval: "12h",
       ephemeral_node_evict_delay: "72h",
       enabled: true,
@@ -194,6 +206,7 @@ export function SubscriptionPage() {
       source_type: "remote",
       url: "",
       content: "",
+      user_agent: "",
       update_interval: "12h",
       ephemeral_node_evict_delay: "72h",
       enabled: true,
@@ -248,6 +261,7 @@ export function SubscriptionPage() {
         source_type: "remote",
         url: "",
         content: "",
+        user_agent: "",
         update_interval: LOCAL_SOURCE_UPDATE_INTERVAL,
         ephemeral_node_evict_delay: "72h",
         enabled: true,
@@ -273,7 +287,7 @@ export function SubscriptionPage() {
         enabled: formData.enabled,
         ephemeral: formData.ephemeral,
         ...(formData.source_type === "remote"
-          ? { url: formData.url.trim() }
+          ? { url: formData.url.trim(), user_agent: formData.user_agent.trim() }
           : { content: formData.content }),
       };
       return updateSubscription(selectedSubscription.id, payload);
@@ -351,7 +365,7 @@ export function SubscriptionPage() {
       enabled: values.enabled,
       ephemeral: values.ephemeral,
       ...(values.source_type === "remote"
-        ? { url: values.url.trim() }
+        ? { url: values.url.trim(), user_agent: values.user_agent.trim() }
         : { content: values.content }),
     };
     await createMutation.mutateAsync(payload);
@@ -720,6 +734,34 @@ export function SubscriptionPage() {
                           <p className="field-error">{t(editForm.formState.errors.url.message)}</p>
                         ) : null}
                       </div>
+
+                      <div className="field-group field-span-2">
+                        <label className="field-label" htmlFor="edit-sub-user-agent">
+                          {t("请求 User-Agent")}
+                        </label>
+                        <Input
+                          id="edit-sub-user-agent"
+                          placeholder={t("留空则跟随系统配置，例如 sing-box")}
+                          {...editForm.register("user_agent")}
+                        />
+                        <p className="muted" style={{ margin: 0 }}>{t("仅远程订阅生效，预设可一键填充常见客户端 UA。")}</p>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                          {SUBSCRIPTION_USER_AGENT_PRESETS.map((preset) => {
+                            const active = (editForm.watch("user_agent") ?? "") === preset.value;
+                            return (
+                              <Button
+                                key={`edit-${preset.label}`}
+                                size="sm"
+                                variant={active ? "secondary" : "ghost"}
+                                title={preset.hint ? t(preset.hint) : undefined}
+                                onClick={() => editForm.setValue("user_agent", preset.value, { shouldDirty: true })}
+                              >
+                                {t(preset.label)}
+                              </Button>
+                            );
+                          })}
+                        </div>
+                      </div>
                     </>
                   ) : (
                     <div className="field-group field-span-2">
@@ -930,6 +972,34 @@ export function SubscriptionPage() {
                     {createForm.formState.errors.url?.message ? (
                       <p className="field-error">{t(createForm.formState.errors.url.message)}</p>
                     ) : null}
+                  </div>
+
+                  <div className="field-group field-span-2">
+                    <label className="field-label" htmlFor="create-sub-user-agent">
+                      {t("请求 User-Agent")}
+                    </label>
+                    <Input
+                      id="create-sub-user-agent"
+                      placeholder={t("留空则跟随系统配置，例如 sing-box")}
+                      {...createForm.register("user_agent")}
+                    />
+                    <p className="muted" style={{ margin: 0 }}>{t("仅远程订阅生效，预设可一键填充常见客户端 UA。")}</p>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                      {SUBSCRIPTION_USER_AGENT_PRESETS.map((preset) => {
+                        const active = (createForm.watch("user_agent") ?? "") === preset.value;
+                        return (
+                          <Button
+                            key={`create-${preset.label}`}
+                            size="sm"
+                            variant={active ? "secondary" : "ghost"}
+                            title={preset.hint ? t(preset.hint) : undefined}
+                            onClick={() => createForm.setValue("user_agent", preset.value, { shouldDirty: true })}
+                          >
+                            {t(preset.label)}
+                          </Button>
+                        );
+                      })}
+                    </div>
                   </div>
                 </>
               ) : (

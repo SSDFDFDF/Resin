@@ -19,14 +19,15 @@ const (
 	// Keep these version markers in sync with SQL files under migrations/state/.
 	// stateLegacyBaselineVersion must remain fixed to the highest migration
 	// version covered by compatibility detection for pre-migrate databases.
-	stateVersionBaseSchema              = 1
-	stateVersionAddEmptyAccountBehavior = 2
-	stateVersionAddFixedAccountHeader   = 3
-	stateVersionNormalizeMissAction     = 4
-	stateVersionAddRegionFilterInvert   = 5
-	stateVersionAddStickyLeaseControls  = 6
-	stateVersionAddRegexFilterInvert    = 7
-	stateLegacyBaselineVersion          = stateVersionAddFixedAccountHeader
+	stateVersionBaseSchema               = 1
+	stateVersionAddEmptyAccountBehavior  = 2
+	stateVersionAddFixedAccountHeader    = 3
+	stateVersionNormalizeMissAction      = 4
+	stateVersionAddRegionFilterInvert    = 5
+	stateVersionAddStickyLeaseControls   = 6
+	stateVersionAddRegexFilterInvert     = 7
+	stateVersionAddSubscriptionUserAgent = 8
+	stateLegacyBaselineVersion           = stateVersionAddFixedAccountHeader
 )
 
 //go:embed migrations/state/*.sql migrations/cache/*.sql
@@ -98,6 +99,9 @@ func prepareLegacyStateBaseline(db *sql.DB, driver migratedb.Driver) error {
 	if !hasPlatforms {
 		return nil
 	}
+	if err := ensureLegacyStateSupplementalTables(db); err != nil {
+		return err
+	}
 
 	hasEmptyBehavior, err := hasTableColumn(db, "platforms", "reverse_proxy_empty_account_behavior")
 	if err != nil {
@@ -127,12 +131,29 @@ func prepareLegacyStateBaseline(db *sql.DB, driver migratedb.Driver) error {
 	if err != nil {
 		return err
 	}
+	hasSubscriptions, err := hasTable(db, "subscriptions")
+	if err != nil {
+		return err
+	}
+	hasSubscriptionUserAgent := false
+	if hasSubscriptions {
+		hasSubscriptionUserAgent, err = hasTableColumn(db, "subscriptions", "user_agent")
+		if err != nil {
+			return err
+		}
+	}
 
 	switch {
 	case hasEmptyBehavior && hasFixedHeader && hasRegionFilterInvert && hasRegexFilterInvert &&
 		hasStickyLeaseMode && hasManualUnavailableAction && hasManualUnavailableGrace:
+		if hasSubscriptionUserAgent {
+			return setMigrationVersion(driver, stateVersionAddSubscriptionUserAgent)
+		}
 		return setMigrationVersion(driver, stateVersionAddRegexFilterInvert)
 	case hasEmptyBehavior && hasFixedHeader && hasRegionFilterInvert && hasRegexFilterInvert:
+		if hasSubscriptionUserAgent {
+			return setMigrationVersion(driver, stateVersionAddSubscriptionUserAgent)
+		}
 		return setMigrationVersion(driver, stateVersionAddRegexFilterInvert)
 	case hasEmptyBehavior && hasFixedHeader && hasRegionFilterInvert &&
 		hasStickyLeaseMode && hasManualUnavailableAction && hasManualUnavailableGrace:
@@ -161,6 +182,46 @@ func prepareLegacyStateBaseline(db *sql.DB, driver migratedb.Driver) error {
 		// No baseline metadata: migrate from base schema.
 		return nil
 	}
+}
+
+func ensureLegacyStateSupplementalTables(db *sql.DB) error {
+	if _, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS system_config (
+			id            INTEGER PRIMARY KEY CHECK (id = 1),
+			config_json   TEXT    NOT NULL,
+			version       INTEGER NOT NULL,
+			updated_at_ns INTEGER NOT NULL
+		)
+	`); err != nil {
+		return fmt.Errorf("ensure system_config: %w", err)
+	}
+	if _, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS subscriptions (
+			id                            TEXT PRIMARY KEY,
+			name                          TEXT NOT NULL,
+			source_type                   TEXT NOT NULL DEFAULT 'remote',
+			url                           TEXT NOT NULL,
+			content                       TEXT NOT NULL DEFAULT '',
+			update_interval_ns            INTEGER NOT NULL,
+			enabled                       INTEGER NOT NULL DEFAULT 1,
+			ephemeral                     INTEGER NOT NULL DEFAULT 0,
+			ephemeral_node_evict_delay_ns INTEGER NOT NULL,
+			created_at_ns                 INTEGER NOT NULL,
+			updated_at_ns                 INTEGER NOT NULL
+		)
+	`); err != nil {
+		return fmt.Errorf("ensure subscriptions: %w", err)
+	}
+	if _, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS account_header_rules (
+			url_prefix    TEXT PRIMARY KEY,
+			headers_json  TEXT NOT NULL,
+			updated_at_ns INTEGER NOT NULL
+		)
+	`); err != nil {
+		return fmt.Errorf("ensure account_header_rules: %w", err)
+	}
+	return nil
 }
 
 func hasMigrationVersion(db *sql.DB, table string) (bool, error) {

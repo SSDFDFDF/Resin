@@ -139,6 +139,12 @@ const EXACT_ZH_TO_EN: Record<string, string> = {
   "订阅来源类型": "Subscription source type",
   "订阅类型": "Subscription type",
   "订阅内容": "Subscription content",
+  "请求 User-Agent": "Request User-Agent",
+  "留空则跟随系统配置，例如 sing-box": "Leave empty to follow the system config, for example sing-box",
+  "仅远程订阅生效，预设可一键填充常见客户端 UA。":
+    "Only applies to remote subscriptions. Presets can fill common client UAs in one click.",
+  "跟随系统": "Follow System",
+  "留空时继承系统配置中的 user_agent": "When empty, inherit user_agent from the system config",
   "订阅内容不能为空": "Subscription content cannot be empty",
   "订阅源": "Subscription Source",
   "本地订阅": "Local subscription",

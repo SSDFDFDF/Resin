@@ -132,6 +132,71 @@ func TestAPIContract_SubscriptionRefreshAction_E2EHTTPSource(t *testing.T) {
 	}
 }
 
+func TestAPIContract_SubscriptionUserAgentOverride_E2EHTTPSource(t *testing.T) {
+	srv, cp, _ := newControlPlaneTestServer(t)
+
+	const rawOutbound = `{"type":"shadowsocks","tag":"edge-refresh","server":"1.1.1.1","server_port":443,"method":"aes-256-gcm","password":"secret"}`
+	subPayload := `{"outbounds":[` + rawOutbound + `]}`
+
+	const defaultUserAgent = "sing-box"
+	const overrideUserAgent = "Resin/dev"
+	var subscriptionHits atomic.Int32
+	subscriptionSource := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		subscriptionHits.Add(1)
+		if got := r.Header.Get("User-Agent"); got != overrideUserAgent {
+			t.Fatalf("subscription user-agent: got %q, want %q", got, overrideUserAgent)
+		}
+		_, _ = w.Write([]byte(subPayload))
+	}))
+	defer subscriptionSource.Close()
+
+	cp.Scheduler = topology.NewSubscriptionScheduler(topology.SchedulerConfig{
+		SubManager: cp.SubMgr,
+		Pool:       cp.Pool,
+		Downloader: netutil.NewDirectDownloader(
+			func() time.Duration { return 2 * time.Second },
+			func() string { return defaultUserAgent },
+		),
+	})
+
+	createRec := doJSONRequest(t, srv, http.MethodPost, "/api/v1/subscriptions", map[string]any{
+		"name":       "sub-e2e-ua",
+		"url":        subscriptionSource.URL + "/sub",
+		"user_agent": overrideUserAgent,
+	}, true)
+	if createRec.Code != http.StatusCreated {
+		t.Fatalf("create subscription status: got %d, want %d, body=%s", createRec.Code, http.StatusCreated, createRec.Body.String())
+	}
+	createBody := decodeJSONMap(t, createRec)
+	subID, _ := createBody["id"].(string)
+	if subID == "" {
+		t.Fatalf("create subscription missing id: body=%s", createRec.Body.String())
+	}
+	if got, _ := createBody["user_agent"].(string); got != overrideUserAgent {
+		t.Fatalf("create subscription user_agent: got %q, want %q", got, overrideUserAgent)
+	}
+
+	refreshRec := doJSONRequest(t, srv, http.MethodPost, "/api/v1/subscriptions/"+subID+"/actions/refresh", nil, true)
+	if refreshRec.Code != http.StatusOK {
+		t.Fatalf("refresh subscription status: got %d, want %d, body=%s", refreshRec.Code, http.StatusOK, refreshRec.Body.String())
+	}
+	if subscriptionHits.Load() == 0 {
+		t.Fatal("subscription HTTP source was not requested")
+	}
+
+	getRec := doJSONRequest(t, srv, http.MethodGet, "/api/v1/subscriptions/"+subID, nil, true)
+	if getRec.Code != http.StatusOK {
+		t.Fatalf("get subscription status: got %d, want %d, body=%s", getRec.Code, http.StatusOK, getRec.Body.String())
+	}
+	subBody := decodeJSONMap(t, getRec)
+	if got, _ := subBody["user_agent"].(string); got != overrideUserAgent {
+		t.Fatalf("subscription user_agent after refresh: got %q, want %q", got, overrideUserAgent)
+	}
+	if got := subBody["node_count"]; got != float64(1) {
+		t.Fatalf("subscription node_count after refresh: got %v, want %v", got, 1)
+	}
+}
+
 func TestAPIContract_SubscriptionRefreshAction_E2ELocalSource(t *testing.T) {
 	srv, _, _ := newControlPlaneTestServer(t)
 

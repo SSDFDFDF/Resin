@@ -27,6 +27,7 @@ type SubscriptionResponse struct {
 	SourceType              string `json:"source_type"`
 	URL                     string `json:"url"`
 	Content                 string `json:"content"`
+	UserAgent               string `json:"user_agent"`
 	UpdateInterval          string `json:"update_interval"`
 	NodeCount               int    `json:"node_count"`
 	HealthyNodeCount        int    `json:"healthy_node_count"`
@@ -68,6 +69,7 @@ func (s *ControlPlaneService) subToResponse(sub *subscription.Subscription) Subs
 		SourceType:              sub.SourceType(),
 		URL:                     sub.URL(),
 		Content:                 sub.Content(),
+		UserAgent:               sub.UserAgent(),
 		UpdateInterval:          time.Duration(sub.UpdateIntervalNs()).String(),
 		NodeCount:               nodeCount,
 		HealthyNodeCount:        healthyNodeCount,
@@ -118,6 +120,7 @@ type CreateSubscriptionRequest struct {
 	SourceType              *string `json:"source_type"`
 	URL                     *string `json:"url"`
 	Content                 *string `json:"content"`
+	UserAgent               *string `json:"user_agent"`
 	UpdateInterval          *string `json:"update_interval"`
 	Enabled                 *bool   `json:"enabled"`
 	Ephemeral               *bool   `json:"ephemeral"`
@@ -154,6 +157,7 @@ func (s *ControlPlaneService) CreateSubscription(req CreateSubscriptionRequest) 
 
 	subURL := ""
 	content := ""
+	userAgent := ""
 	switch sourceType {
 	case subscription.SourceTypeRemote:
 		if req.URL == nil || strings.TrimSpace(*req.URL) == "" {
@@ -166,6 +170,9 @@ func (s *ControlPlaneService) CreateSubscription(req CreateSubscriptionRequest) 
 		if req.Content != nil && strings.TrimSpace(*req.Content) != "" {
 			return nil, invalidArg("content is not allowed for remote subscription")
 		}
+		if req.UserAgent != nil {
+			userAgent = strings.TrimSpace(*req.UserAgent)
+		}
 	case subscription.SourceTypeLocal:
 		if req.Content == nil || strings.TrimSpace(*req.Content) == "" {
 			return nil, invalidArg("content is required for local subscription")
@@ -173,6 +180,9 @@ func (s *ControlPlaneService) CreateSubscription(req CreateSubscriptionRequest) 
 		content = *req.Content
 		if req.URL != nil && strings.TrimSpace(*req.URL) != "" {
 			return nil, invalidArg("url is not allowed for local subscription")
+		}
+		if req.UserAgent != nil && strings.TrimSpace(*req.UserAgent) != "" {
+			return nil, invalidArg("user_agent is not allowed for local subscription")
 		}
 	default:
 		return nil, invalidArg("source_type: must be remote or local")
@@ -219,6 +229,7 @@ func (s *ControlPlaneService) CreateSubscription(req CreateSubscriptionRequest) 
 		SourceType:                sourceType,
 		URL:                       subURL,
 		Content:                   content,
+		UserAgent:                 userAgent,
 		UpdateIntervalNs:          int64(updateInterval),
 		Enabled:                   enabled,
 		Ephemeral:                 ephemeral,
@@ -234,6 +245,7 @@ func (s *ControlPlaneService) CreateSubscription(req CreateSubscriptionRequest) 
 	sub.SetFetchConfig(subURL, int64(updateInterval))
 	sub.SetSourceType(sourceType)
 	sub.SetContent(content)
+	sub.SetUserAgent(userAgent)
 	sub.SetEphemeralNodeEvictDelayNs(int64(ephemeralNodeEvictDelay))
 	sub.CreatedAtNs = now
 	sub.UpdatedAtNs = now
@@ -267,6 +279,7 @@ func (s *ControlPlaneService) UpdateSubscription(id string, patchJSON json.RawMe
 	enabledChanged := false
 	urlChanged := false
 	contentChanged := false
+	userAgentChanged := false
 	sourceType := sub.SourceType()
 
 	newName := sub.Name()
@@ -308,6 +321,19 @@ func (s *ControlPlaneService) UpdateSubscription(id string, patchJSON json.RawMe
 		newContent = contentStr
 		if newContent != sub.Content() {
 			contentChanged = true
+		}
+	}
+
+	newUserAgent := sub.UserAgent()
+	if userAgentStr, ok, err := patch.optionalString("user_agent"); err != nil {
+		return nil, err
+	} else if ok {
+		if sourceType != subscription.SourceTypeRemote {
+			return nil, invalidArg("user_agent: field is not allowed for local subscription")
+		}
+		newUserAgent = strings.TrimSpace(userAgentStr)
+		if newUserAgent != sub.UserAgent() {
+			userAgentChanged = true
 		}
 	}
 
@@ -355,6 +381,7 @@ func (s *ControlPlaneService) UpdateSubscription(id string, patchJSON json.RawMe
 		SourceType:                sourceType,
 		URL:                       newURL,
 		Content:                   newContent,
+		UserAgent:                 newUserAgent,
 		UpdateIntervalNs:          newInterval,
 		Enabled:                   newEnabled,
 		Ephemeral:                 newEphemeral,
@@ -369,6 +396,7 @@ func (s *ControlPlaneService) UpdateSubscription(id string, patchJSON json.RawMe
 	// Apply side-effects via scheduler.
 	sub.SetFetchConfig(newURL, newInterval)
 	sub.SetContent(newContent)
+	sub.SetUserAgent(newUserAgent)
 	sub.SetEphemeral(newEphemeral)
 	sub.SetEphemeralNodeEvictDelayNs(newEphemeralNodeEvictDelay)
 	sub.UpdatedAtNs = now
@@ -379,7 +407,7 @@ func (s *ControlPlaneService) UpdateSubscription(id string, patchJSON json.RawMe
 	if enabledChanged {
 		s.Scheduler.SetSubscriptionEnabled(sub, newEnabled)
 	}
-	if urlChanged || contentChanged {
+	if urlChanged || contentChanged || userAgentChanged {
 		go s.Scheduler.UpdateSubscription(sub)
 	}
 

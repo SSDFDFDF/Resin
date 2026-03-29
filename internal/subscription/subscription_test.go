@@ -123,6 +123,20 @@ func TestSubscription_SourceTypeAndContent(t *testing.T) {
 	}
 }
 
+func TestSubscription_UserAgent(t *testing.T) {
+	s := NewSubscription("id1", "sub", "url", true, false)
+	v0 := s.ConfigVersion()
+
+	s.SetUserAgent("Resin/dev")
+
+	if got := s.UserAgent(); got != "Resin/dev" {
+		t.Fatalf("expected user agent override, got %q", got)
+	}
+	if s.ConfigVersion() <= v0 {
+		t.Fatalf("expected config version to increase: old=%d new=%d", v0, s.ConfigVersion())
+	}
+}
+
 func TestDiffHashes(t *testing.T) {
 	h1 := node.HashFromRawOptions([]byte(`{"type":"ss","server":"1.1.1.1"}`))
 	h2 := node.HashFromRawOptions([]byte(`{"type":"ss","server":"2.2.2.2"}`))

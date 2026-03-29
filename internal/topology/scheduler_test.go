@@ -22,8 +22,8 @@ import (
 )
 
 // makeMockFetcher returns a Fetcher that serves the given response.
-func makeMockFetcher(body []byte, err error) func(string) ([]byte, error) {
-	return func(url string) ([]byte, error) {
+func makeMockFetcher(body []byte, err error) func(string, string) ([]byte, error) {
+	return func(url string, _ string) ([]byte, error) {
 		return body, err
 	}
 }
@@ -40,7 +40,7 @@ func makeSubscriptionJSON(outbounds ...string) []byte {
 	return []byte(`{"outbounds":` + arr + `}`)
 }
 
-func newTestScheduler(subMgr *SubscriptionManager, pool *GlobalNodePool, fetcher func(string) ([]byte, error)) *SubscriptionScheduler {
+func newTestScheduler(subMgr *SubscriptionManager, pool *GlobalNodePool, fetcher func(string, string) ([]byte, error)) *SubscriptionScheduler {
 	return NewSubscriptionScheduler(SchedulerConfig{
 		SubManager: subMgr,
 		Pool:       pool,
@@ -141,6 +141,44 @@ func TestScheduler_UpdateSubscription_DownloadViaHTTPServer(t *testing.T) {
 	}
 	if _, ok := pool.GetEntry(hash); !ok {
 		t.Fatalf("pool should contain %s", hash.Hex())
+	}
+}
+
+func TestScheduler_UpdateSubscription_SubscriptionUserAgentOverridesDownloaderDefault(t *testing.T) {
+	subMgr := NewSubscriptionManager()
+	pool := newTestPool(subMgr)
+
+	const rawOutbound = `{"type":"shadowsocks","tag":"http-node","server":"1.1.1.1","server_port":443,"method":"aes-256-gcm","password":"secret"}`
+	body := makeSubscriptionJSON(rawOutbound)
+
+	var gotUserAgent string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotUserAgent = r.Header.Get("User-Agent")
+		_, _ = w.Write(body)
+	}))
+	defer srv.Close()
+
+	sub := subscription.NewSubscription("s1", "TestSub", srv.URL+"/sub", true, false)
+	sub.SetUserAgent("Resin/dev")
+	subMgr.Register(sub)
+
+	downloader := netutil.NewDirectDownloader(
+		func() time.Duration { return time.Second },
+		func() string { return "sing-box" },
+	)
+	sched := NewSubscriptionScheduler(SchedulerConfig{
+		SubManager: subMgr,
+		Pool:       pool,
+		Downloader: downloader,
+	})
+
+	sched.UpdateSubscription(sub)
+
+	if gotUserAgent != "Resin/dev" {
+		t.Fatalf("user-agent: got %q, want %q", gotUserAgent, "Resin/dev")
+	}
+	if sub.GetLastError() != "" {
+		t.Fatalf("unexpected last error: %q", sub.GetLastError())
 	}
 }
 
@@ -426,7 +464,7 @@ func TestScheduler_FailurePath_Serialized(t *testing.T) {
 	pool := newTestPool(subMgr)
 
 	var fetchCount atomic.Int32
-	fetcher := func(url string) ([]byte, error) {
+	fetcher := func(url string, _ string) ([]byte, error) {
 		fetchCount.Add(1)
 		return nil, errors.New("fail")
 	}
@@ -464,7 +502,7 @@ func TestScheduler_StaleFailureDoesNotOverrideNewerSuccess(t *testing.T) {
 	firstStarted := make(chan struct{})
 	releaseFirst := make(chan struct{})
 	var calls atomic.Int32
-	fetcher := func(url string) ([]byte, error) {
+	fetcher := func(url string, _ string) ([]byte, error) {
 		if calls.Add(1) == 1 {
 			close(firstStarted)
 			<-releaseFirst
@@ -527,7 +565,7 @@ func TestScheduler_StaleSuccessDoesNotOverrideNewerSuccess(t *testing.T) {
 	firstStarted := make(chan struct{})
 	releaseFirst := make(chan struct{})
 	var calls atomic.Int32
-	fetcher := func(url string) ([]byte, error) {
+	fetcher := func(url string, _ string) ([]byte, error) {
 		if calls.Add(1) == 1 {
 			close(firstStarted)
 			<-releaseFirst
@@ -646,7 +684,7 @@ func TestScheduler_DueCheck(t *testing.T) {
 
 	pool := newTestPool(subMgr)
 	var fetchedURLs sync.Map
-	fetcher := func(url string) ([]byte, error) {
+	fetcher := func(url string, _ string) ([]byte, error) {
 		fetchedURLs.Store(url, true)
 		return makeSubscriptionJSON(), nil
 	}
@@ -695,7 +733,7 @@ func TestScheduler_Tick_UpdatesDueSubscriptionsInParallel(t *testing.T) {
 	releaseFetch := make(chan struct{})
 	allStarted := make(chan struct{})
 	var started atomic.Int32
-	fetcher := func(url string) ([]byte, error) {
+	fetcher := func(url string, _ string) ([]byte, error) {
 		if started.Add(1) == 2 {
 			close(allStarted)
 		}
@@ -743,7 +781,7 @@ func TestScheduler_ForceRefreshAllAsync_ReturnsImmediately(t *testing.T) {
 	pool := newTestPool(subMgr)
 	fetchStarted := make(chan struct{})
 	releaseFetch := make(chan struct{})
-	fetcher := func(url string) ([]byte, error) {
+	fetcher := func(url string, _ string) ([]byte, error) {
 		close(fetchStarted)
 		<-releaseFetch
 		return makeSubscriptionJSON(), nil
@@ -783,7 +821,7 @@ func TestScheduler_ForceRefreshAll_UpdatesSubscriptionsInParallel(t *testing.T) 
 	releaseFetch := make(chan struct{})
 	allStarted := make(chan struct{})
 	var started atomic.Int32
-	fetcher := func(url string) ([]byte, error) {
+	fetcher := func(url string, _ string) ([]byte, error) {
 		if started.Add(1) == 2 {
 			close(allStarted)
 		}
@@ -843,7 +881,7 @@ func TestScheduler_ForceRefreshAll_LimitsConcurrentUpdates(t *testing.T) {
 	var started atomic.Int32
 	var inFlight atomic.Int32
 	var maxInFlight atomic.Int32
-	fetcher := func(url string) ([]byte, error) {
+	fetcher := func(url string, _ string) ([]byte, error) {
 		current := inFlight.Add(1)
 		for {
 			prev := maxInFlight.Load()
@@ -903,7 +941,7 @@ func TestScheduler_ForceRefreshAll_AfterStopDoesNotFetch(t *testing.T) {
 
 	pool := newTestPool(subMgr)
 	var calls atomic.Int32
-	fetcher := func(url string) ([]byte, error) {
+	fetcher := func(url string, _ string) ([]byte, error) {
 		calls.Add(1)
 		return makeSubscriptionJSON(), nil
 	}
