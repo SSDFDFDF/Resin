@@ -15,6 +15,16 @@ func (f downloaderFunc) Download(ctx context.Context, url string) ([]byte, error
 	return f(ctx, url)
 }
 
+type userAgentDownloaderFunc func(ctx context.Context, url string, userAgent string) ([]byte, error)
+
+func (f userAgentDownloaderFunc) Download(ctx context.Context, url string) ([]byte, error) {
+	return f(ctx, url, "")
+}
+
+func (f userAgentDownloaderFunc) DownloadWithUserAgent(ctx context.Context, url string, userAgent string) ([]byte, error) {
+	return f(ctx, url, userAgent)
+}
+
 func TestRetryDownloader_NoRetryOnHTTPStatusError(t *testing.T) {
 	var pickerCalls, proxyCalls int
 
@@ -26,7 +36,7 @@ func TestRetryDownloader_NoRetryOnHTTPStatusError(t *testing.T) {
 			pickerCalls++
 			return node.Zero, nil
 		},
-		ProxyFetch: func(_ context.Context, _ node.Hash, _ string) ([]byte, error) {
+		ProxyFetch: func(_ context.Context, _ node.Hash, _ string, _ string) ([]byte, error) {
 			proxyCalls++
 			return []byte("proxy"), nil
 		},
@@ -53,7 +63,7 @@ func TestRetryDownloader_NoRetryOnNonRetryableError(t *testing.T) {
 			pickerCalls++
 			return node.Zero, nil
 		},
-		ProxyFetch: func(_ context.Context, _ node.Hash, _ string) ([]byte, error) {
+		ProxyFetch: func(_ context.Context, _ node.Hash, _ string, _ string) ([]byte, error) {
 			proxyCalls++
 			return []byte("proxy"), nil
 		},
@@ -82,7 +92,7 @@ func TestRetryDownloader_RetryOnNetworkError(t *testing.T) {
 			pickerCalls++
 			return node.HashFromRawOptions([]byte(`{"id":"retry-node"}`)), nil
 		},
-		ProxyFetch: func(_ context.Context, _ node.Hash, _ string) ([]byte, error) {
+		ProxyFetch: func(_ context.Context, _ node.Hash, _ string, _ string) ([]byte, error) {
 			proxyCalls++
 			return []byte("via-proxy"), nil
 		},
@@ -136,7 +146,7 @@ func TestRetryDownloader_ProxyRetriesExhaustedReturnsDirectError(t *testing.T) {
 			pickerCalls++
 			return node.HashFromRawOptions([]byte(`{"id":"retry-node"}`)), nil
 		},
-		ProxyFetch: func(_ context.Context, _ node.Hash, _ string) ([]byte, error) {
+		ProxyFetch: func(_ context.Context, _ node.Hash, _ string, _ string) ([]byte, error) {
 			proxyCalls++
 			return nil, errors.New("proxy failed")
 		},
@@ -167,7 +177,7 @@ func TestRetryDownloader_NoRetryWhenCallerDeadlineExceeded(t *testing.T) {
 			pickerCalls++
 			return node.HashFromRawOptions([]byte(`{"id":"retry-node-deadline"}`)), nil
 		},
-		ProxyFetch: func(ctx context.Context, _ node.Hash, _ string) ([]byte, error) {
+		ProxyFetch: func(ctx context.Context, _ node.Hash, _ string, _ string) ([]byte, error) {
 			proxyCalls++
 			if ctx.Err() != nil {
 				return nil, ctx.Err()
@@ -200,7 +210,7 @@ func TestRetryDownloader_ProxyAttemptTimeoutStillApplies(t *testing.T) {
 			pickerCalls++
 			return node.HashFromRawOptions([]byte(`{"id":"retry-node-attempt-timeout"}`)), nil
 		},
-		ProxyFetch: func(ctx context.Context, _ node.Hash, _ string) ([]byte, error) {
+		ProxyFetch: func(ctx context.Context, _ node.Hash, _ string, _ string) ([]byte, error) {
 			proxyCalls++
 			if _, ok := ctx.Deadline(); !ok {
 				return nil, errors.New("missing per-attempt deadline")
@@ -225,5 +235,52 @@ func TestRetryDownloader_ProxyAttemptTimeoutStillApplies(t *testing.T) {
 	}
 	if pickerCalls != 2 || proxyCalls != 2 {
 		t.Fatalf("expected two timed attempts, got picker=%d proxy=%d", pickerCalls, proxyCalls)
+	}
+}
+
+func TestRetryDownloader_DownloadWithUserAgent_PassesOverrideToDirectDownloader(t *testing.T) {
+	const wantUA = "Resin/dev"
+
+	r := &RetryDownloader{
+		Direct: userAgentDownloaderFunc(func(_ context.Context, _ string, userAgent string) ([]byte, error) {
+			return []byte(userAgent), nil
+		}),
+	}
+
+	body, err := r.DownloadWithUserAgent(context.Background(), "https://example.com", wantUA)
+	if err != nil {
+		t.Fatalf("expected direct download success, got %v", err)
+	}
+	if string(body) != wantUA {
+		t.Fatalf("unexpected user-agent body: got %q want %q", string(body), wantUA)
+	}
+}
+
+func TestRetryDownloader_DownloadWithUserAgent_PassesOverrideToProxyRetry(t *testing.T) {
+	const wantUA = "Resin/dev"
+	var gotProxyUA string
+
+	r := &RetryDownloader{
+		Direct: userAgentDownloaderFunc(func(_ context.Context, _ string, _ string) ([]byte, error) {
+			return nil, context.DeadlineExceeded
+		}),
+		NodePicker: func(_ string) (node.Hash, error) {
+			return node.HashFromRawOptions([]byte(`{"id":"retry-node-ua"}`)), nil
+		},
+		ProxyFetch: func(_ context.Context, _ node.Hash, _ string, userAgent string) ([]byte, error) {
+			gotProxyUA = userAgent
+			return []byte("via-proxy"), nil
+		},
+	}
+
+	body, err := r.DownloadWithUserAgent(context.Background(), "https://example.com", wantUA)
+	if err != nil {
+		t.Fatalf("expected proxy retry success, got %v", err)
+	}
+	if string(body) != "via-proxy" {
+		t.Fatalf("unexpected body %q", string(body))
+	}
+	if gotProxyUA != wantUA {
+		t.Fatalf("unexpected proxy user-agent: got %q want %q", gotProxyUA, wantUA)
 	}
 }

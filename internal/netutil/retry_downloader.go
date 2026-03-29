@@ -16,16 +16,22 @@ type RetryDownloader struct {
 	// otherwise 30s.
 	ProxyAttemptTimeout time.Duration
 	NodePicker          func(target string) (node.Hash, error)
-	ProxyFetch          func(ctx context.Context, hash node.Hash, url string) ([]byte, error)
+	ProxyFetch          func(ctx context.Context, hash node.Hash, url string, userAgent string) ([]byte, error)
 }
 
 // Download attempts direct download first, then falls back to proxy retries.
 func (r *RetryDownloader) Download(ctx context.Context, url string) ([]byte, error) {
+	return r.DownloadWithUserAgent(ctx, url, "")
+}
+
+// DownloadWithUserAgent attempts direct download first, then falls back to
+// proxy retries while preserving the caller's per-request user-agent override.
+func (r *RetryDownloader) DownloadWithUserAgent(ctx context.Context, url string, userAgent string) ([]byte, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 
-	body, err := r.Direct.Download(ctx, url)
+	body, err := r.downloadDirect(ctx, url, userAgent)
 	if err == nil {
 		return body, nil
 	}
@@ -61,7 +67,7 @@ func (r *RetryDownloader) Download(ctx context.Context, url string) ([]byte, err
 		if attemptTimeout > 0 {
 			attemptCtx, cancel = context.WithTimeout(ctx, attemptTimeout)
 		}
-		body, fetchErr := r.ProxyFetch(attemptCtx, hash, url)
+		body, fetchErr := r.ProxyFetch(attemptCtx, hash, url, userAgent)
 		cancel()
 		if fetchErr == nil {
 			return body, nil
@@ -69,6 +75,13 @@ func (r *RetryDownloader) Download(ctx context.Context, url string) ([]byte, err
 	}
 
 	return nil, err
+}
+
+func (r *RetryDownloader) downloadDirect(ctx context.Context, url string, userAgent string) ([]byte, error) {
+	if direct, ok := r.Direct.(UserAgentDownloader); ok {
+		return direct.DownloadWithUserAgent(ctx, url, userAgent)
+	}
+	return r.Direct.Download(ctx, url)
 }
 
 func shouldRetryViaProxy(err error) bool {
