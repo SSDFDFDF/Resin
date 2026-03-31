@@ -30,6 +30,17 @@ export type PageResponse<T> = {
   offset: number;
 };
 
+export type LeaseResponse = {
+  platform_id: string;
+  account: string;
+  node_hash: string;
+  node_tag: string;
+  egress_ip: string;
+  expiry: string;
+  last_accessed: string;
+  unavailable_since?: string;
+};
+
 export type PlatformCreateInput = {
   name: string;
   sticky_ttl?: string;

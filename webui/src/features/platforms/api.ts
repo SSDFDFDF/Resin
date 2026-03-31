@@ -1,5 +1,5 @@
 import { apiRequest } from "../../lib/api-client";
-import type { PageResponse, Platform, PlatformCreateInput, PlatformUpdateInput } from "./types";
+import type { PageResponse, LeaseResponse, Platform, PlatformCreateInput, PlatformUpdateInput } from "./types";
 
 const basePath = "/api/v1/platforms";
 
@@ -118,6 +118,33 @@ export async function rebuildPlatform(id: string): Promise<void> {
 
 export async function clearAllPlatformLeases(id: string): Promise<void> {
   await apiRequest<void>(`${basePath}/${id}/leases`, {
+    method: "DELETE",
+  });
+}
+
+export type ListLeasesInput = {
+  limit?: number;
+  offset?: number;
+  account?: string;
+  fuzzy?: boolean;
+  sort_by?: "account" | "expiry" | "last_accessed";
+};
+
+export async function listLeases(platformId: string, input: ListLeasesInput = {}): Promise<PageResponse<LeaseResponse>> {
+  const query = new URLSearchParams({
+    limit: String(input.limit ?? 25),
+    offset: String(input.offset ?? 0),
+  });
+  if (input.account?.trim()) {
+    query.set("account", input.account.trim());
+    if (input.fuzzy) query.set("fuzzy", "true");
+  }
+  if (input.sort_by) query.set("sort_by", input.sort_by);
+  return apiRequest<PageResponse<LeaseResponse>>(`${basePath}/${platformId}/leases?${query}`);
+}
+
+export async function deleteLease(platformId: string, account: string): Promise<void> {
+  await apiRequest<void>(`${basePath}/${platformId}/leases/${encodeURIComponent(account)}`, {
     method: "DELETE",
   });
 }

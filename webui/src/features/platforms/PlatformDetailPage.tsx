@@ -16,7 +16,7 @@ import { useToast } from "../../hooks/useToast";
 import { useI18n } from "../../i18n";
 import { formatApiErrorMessage } from "../../lib/error-message";
 import { formatGoDuration, formatRelativeTime } from "../../lib/time";
-import { clearAllPlatformLeases, deletePlatform, getPlatform, resetPlatform, updatePlatform } from "./api";
+import { deletePlatform, getPlatform, resetPlatform, updatePlatform } from "./api";
 import {
   allocationPolicies,
   allocationPolicyLabel,
@@ -38,14 +38,16 @@ import {
   type PlatformFormValues,
 } from "./formModel";
 import { PlatformMonitorPanel } from "./PlatformMonitorPanel";
+import { LeaseTab } from "./LeaseTab";
 
-type PlatformDetailTab = "monitor" | "config" | "ops";
+type PlatformDetailTab = "monitor" | "config" | "leases" | "ops";
 
 const ZERO_UUID = "00000000-0000-0000-0000-000000000000";
 const DETAIL_TABS: Array<{ key: PlatformDetailTab; label: string; hint: string }> = [
   { key: "monitor", label: "监控", hint: "平台运行态趋势和快照" },
   { key: "config", label: "配置", hint: "过滤规则与分配策略" },
-  { key: "ops", label: "运维", hint: "重置、清租约、删除操作" },
+  { key: "leases", label: "租约", hint: "查看和管理当前平台的粘性路由租约" },
+  { key: "ops", label: "运维", hint: "重置与删除操作" },
 ];
 
 export function PlatformDetailPage() {
@@ -129,23 +131,6 @@ export function PlatformDetailPage() {
     },
   });
 
-  const clearLeasesMutation = useMutation({
-    mutationFn: async () => {
-      if (!platform) {
-        throw new Error("平台不存在或已被删除");
-      }
-      await clearAllPlatformLeases(platform.id);
-      return platform;
-    },
-    onSuccess: async (updated) => {
-      await queryClient.invalidateQueries({ queryKey: ["platform-monitor"] });
-      showToast("success", t("平台 {{name}} 的所有租约已清除", { name: updated.name }));
-    },
-    onError: (error) => {
-      showToast("error", formatApiErrorMessage(error, t));
-    },
-  });
-
   const deleteMutation = useMutation({
     mutationFn: async () => {
       if (!platform) {
@@ -180,17 +165,6 @@ export function PlatformDetailPage() {
       return;
     }
     await deleteMutation.mutateAsync();
-  };
-
-  const handleClearAllLeases = async () => {
-    if (!platform) {
-      return;
-    }
-    const confirmed = window.confirm(t("确认清除平台 {{name}} 的所有租约？", { name: platform.name }));
-    if (!confirmed) {
-      return;
-    }
-    await clearLeasesMutation.mutateAsync();
   };
 
   const stickyTTL = platform ? formatGoDuration(platform.sticky_ttl, t("默认")) : t("默认");
@@ -533,6 +507,17 @@ export function PlatformDetailPage() {
               </section>
             ) : null}
 
+            {activeTab === "leases" ? (
+              <div
+                id="platform-tabpanel-leases"
+                role="tabpanel"
+                aria-labelledby="platform-tab-leases"
+                className="platform-detail-panel"
+              >
+                <LeaseTab platformId={platform.id} platformName={platform.name} />
+              </div>
+            ) : null}
+
             {activeTab === "ops" ? (
               <section
                 id="platform-tabpanel-ops"
@@ -553,16 +538,6 @@ export function PlatformDetailPage() {
                     </div>
                     <Button variant="secondary" onClick={() => void resetMutation.mutateAsync()} disabled={resetMutation.isPending}>
                       {resetMutation.isPending ? t("重置中...") : t("重置为默认配置")}
-                    </Button>
-                  </div>
-
-                  <div className="platform-op-item">
-                    <div className="platform-op-copy">
-                      <h5>{t("清除所有租约")}</h5>
-                      <p className="platform-op-hint">{t("立即清除当前平台的全部租约，下次请求将重新分配出口。")}</p>
-                    </div>
-                    <Button variant="danger" onClick={() => void handleClearAllLeases()} disabled={clearLeasesMutation.isPending}>
-                      {clearLeasesMutation.isPending ? t("清除中...") : t("清除所有租约")}
                     </Button>
                   </div>
 

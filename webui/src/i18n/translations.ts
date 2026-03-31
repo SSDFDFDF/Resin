@@ -633,6 +633,17 @@ const EXACT_ZH_TO_EN: Record<string, string> = {
   "总请求": "Total requests",
   "最近错误：{{message}}": "Recent error: {{message}}",
   "配置已更新（{{count}} 项变更）": "Config updated ({{count}} changes)",
+  "租约": "Leases",
+  "查看和管理当前平台的粘性路由租约": "View and manage sticky routing leases for this platform",
+  "账号搜索": "Account search",
+  "排序": "Sort",
+  "过期时间": "Expiry",
+  "最后访问": "Last Accessed",
+  "活跃": "Active",
+  "不可用": "Unavailable",
+  "确认删除租约 {{account}}？": "Confirm delete lease for {{account}}?",
+  "租约 {{account}} 已删除": "Lease {{account}} deleted",
+  "暂无租约": "No leases",
 };
 
 export function translateDocumentTitle(locale: AppLocale): string {
