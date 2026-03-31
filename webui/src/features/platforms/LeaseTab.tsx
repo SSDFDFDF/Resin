@@ -112,7 +112,7 @@ export function LeaseTab({ platformId, platformName }: LeaseTabProps) {
     {
       accessorKey: "account",
       header: () => t("账号"),
-      cell: (info) => <span style={{ fontFamily: "monospace" }}>{info.getValue<string>()}</span>,
+      cell: (info) => <span>{info.getValue<string>()}</span>,
     },
     {
       accessorKey: "node_tag",
@@ -122,7 +122,7 @@ export function LeaseTab({ platformId, platformName }: LeaseTabProps) {
     {
       accessorKey: "egress_ip",
       header: () => t("出口 IP"),
-      cell: (info) => <span style={{ fontFamily: "monospace" }}>{info.getValue<string>()}</span>,
+      cell: (info) => <span>{info.getValue<string>()}</span>,
     },
     {
       accessorKey: "expiry",
@@ -174,17 +174,18 @@ export function LeaseTab({ platformId, platformName }: LeaseTabProps) {
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
 
       <div className="lease-tab-toolbar">
-        <div className="lease-tab-search">
+        <label className="search-box lease-tab-search" htmlFor="lease-account-search">
           <Search size={16} />
           <Input
+            id="lease-account-search"
             placeholder={t("账号搜索")}
             value={search}
             onChange={(e) => handleSearchChange(e.target.value)}
           />
-        </div>
+        </label>
 
         <div className="lease-tab-actions">
-          <Select value={sortBy} onChange={(e) => handleSortChange(e.target.value)}>
+          <Select value={sortBy} onChange={(e) => handleSortChange(e.target.value)} aria-label={t("排序")}>
             {SORT_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
                 {t(opt.label)}
@@ -206,6 +207,7 @@ export function LeaseTab({ platformId, platformName }: LeaseTabProps) {
         <DataTable<LeaseResponse>
           data={leases}
           columns={columns}
+          className="data-table-leases"
           getRowId={(row) => row.account}
         />
       )}

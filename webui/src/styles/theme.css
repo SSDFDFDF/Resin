@@ -2035,6 +2035,10 @@ a {
   min-width: 900px;
 }
 
+.data-table-leases {
+  min-width: 820px;
+}
+
 .data-table th,
 .data-table td {
   padding: 10px 12px;
@@ -2631,6 +2635,73 @@ a {
   width: var(--platform-op-btn-width);
   max-width: 100%;
   flex-shrink: 0;
+}
+
+/* ── lease tab ── */
+
+.lease-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.lease-tab-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+  flex-wrap: wrap;
+}
+
+.lease-tab-search {
+  max-width: 220px;
+  margin: 0;
+}
+
+.lease-tab-search .input {
+  padding: 6px 10px;
+  border-radius: 8px;
+}
+
+.lease-tab-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lease-tab .data-table-wrap {
+  margin-top: 0;
+}
+
+.lease-tab .data-table tbody tr {
+  cursor: default;
+}
+
+.lease-tab .data-table-leases td:first-child span,
+.lease-tab .data-table-leases td:nth-child(3) span {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  color: #3e4f68;
+}
+
+.lease-tab .nodes-pagination {
+  margin-top: 10px;
+}
+
+@media (max-width: 768px) {
+  .lease-tab-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .lease-tab-search {
+    max-width: none;
+  }
+
+  .lease-tab-actions {
+    justify-content: flex-end;
+  }
 }
 
 @keyframes drawer-in {
