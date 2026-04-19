@@ -2,7 +2,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createColumnHelper } from "@tanstack/react-table";
 import { AlertTriangle, Eye, Filter, Info, Pencil, Plus, RefreshCw, Search, Sparkles, Trash2, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { Link } from "react-router-dom";
 import { z } from "zod";
@@ -137,7 +137,9 @@ export function SubscriptionPage() {
   const [selectedSubscriptionId, setSelectedSubscriptionId] = useState("");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [pendingRefreshIds, setPendingRefreshIds] = useState<Set<string>>(() => new Set());
   const { toasts, showToast, dismissToast } = useToast();
+  const pendingRefreshIdsRef = useRef<Set<string>>(new Set());
 
   const queryClient = useQueryClient();
   const enabledValue = parseEnabledFilter(enabledFilter);
@@ -336,7 +338,29 @@ export function SubscriptionPage() {
     },
   });
   const refreshSubscriptionMutateAsync = refreshMutation.mutateAsync;
-  const isRefreshPending = refreshMutation.isPending;
+
+  const markRefreshPending = useCallback((subscriptionId: string): boolean => {
+    if (pendingRefreshIdsRef.current.has(subscriptionId)) {
+      return false;
+    }
+    const next = new Set(pendingRefreshIdsRef.current);
+    next.add(subscriptionId);
+    pendingRefreshIdsRef.current = next;
+    setPendingRefreshIds(next);
+    return true;
+  }, []);
+
+  const clearRefreshPending = useCallback((subscriptionId: string) => {
+    if (!pendingRefreshIdsRef.current.has(subscriptionId)) {
+      return;
+    }
+    const next = new Set(pendingRefreshIdsRef.current);
+    next.delete(subscriptionId);
+    pendingRefreshIdsRef.current = next;
+    setPendingRefreshIds(next);
+  }, []);
+
+  const isRefreshPending = useCallback((subscriptionId: string): boolean => pendingRefreshIds.has(subscriptionId), [pendingRefreshIds]);
 
   const cleanupCircuitOpenNodesMutation = useMutation({
     mutationFn: async (subscription: Subscription) => {
@@ -397,8 +421,17 @@ export function SubscriptionPage() {
   }, []);
 
   const handleRefresh = useCallback(async (subscription: Subscription) => {
-    await refreshSubscriptionMutateAsync(subscription);
-  }, [refreshSubscriptionMutateAsync]);
+    if (!markRefreshPending(subscription.id)) {
+      return;
+    }
+    try {
+      await refreshSubscriptionMutateAsync(subscription);
+    } catch {
+      // Mutation callbacks already surface the failure to the user.
+    } finally {
+      clearRefreshPending(subscription.id);
+    }
+  }, [clearRefreshPending, markRefreshPending, refreshSubscriptionMutateAsync]);
 
   const changePageSize = (next: number) => {
     setPageSize(next);
@@ -491,7 +524,7 @@ export function SubscriptionPage() {
                 size="sm"
                 variant="ghost"
                 onClick={() => void handleRefresh(s)}
-                disabled={isRefreshPending}
+                disabled={isRefreshPending(s.id)}
                 title={t("刷新")}
               >
                 <RefreshCw size={14} />
@@ -853,10 +886,10 @@ export function SubscriptionPage() {
                     </div>
                     <Button
                       variant="secondary"
-                      onClick={() => void refreshMutation.mutateAsync(selectedSubscription)}
-                      disabled={refreshMutation.isPending}
+                      onClick={() => void handleRefresh(selectedSubscription)}
+                      disabled={isRefreshPending(selectedSubscription.id)}
                     >
-                      {refreshMutation.isPending ? t("刷新中...") : t("立即刷新")}
+                      {isRefreshPending(selectedSubscription.id) ? t("刷新中...") : t("立即刷新")}
                     </Button>
                   </div>
 

@@ -889,13 +889,6 @@ func (s *ControlPlaneService) PreviewFilter(req PreviewFilterRequest) ([]NodeSum
 	if s.Pool != nil {
 		subLookup = s.Pool.MakeSubLookup()
 	}
-	var regionFilterSet map[string]struct{}
-	if len(regionFilters) > 0 {
-		regionFilterSet = make(map[string]struct{}, len(regionFilters))
-		for _, rf := range regionFilters {
-			regionFilterSet[rf] = struct{}{}
-		}
-	}
 
 	var result []NodeSummary
 	s.Pool.Range(func(h node.Hash, entry *node.NodeEntry) bool {
@@ -906,17 +899,12 @@ func (s *ControlPlaneService) PreviewFilter(req PreviewFilterRequest) ([]NodeSum
 		if !regexMatched {
 			return true
 		}
-		if len(regionFilterSet) > 0 {
+		if len(regionFilters) > 0 {
 			region := entry.GetRegion(nil)
 			if s.GeoIP != nil {
 				region = entry.GetRegion(s.GeoIP.Lookup)
 			}
-			_, ok := regionFilterSet[region]
-			if req.PlatformSpec.RegionFilterInvert {
-				if ok {
-					return true
-				}
-			} else if !ok {
+			if !platform.MatchRegionFilter(region, regionFilters, req.PlatformSpec.RegionFilterInvert) {
 				return true
 			}
 		}

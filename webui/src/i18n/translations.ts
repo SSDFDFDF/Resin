@@ -284,6 +284,8 @@ const EXACT_ZH_TO_EN: Record<string, string> = {
   "反向过滤：排除匹配这些正则的节点":
     "Invert filter: exclude nodes matching these regex patterns",
   "每行一条，如 hk / us": "One per line, e.g. hk / us",
+  "开启地区过滤后，仅已识别地区的节点会命中；打开反向过滤后，上述地区会被排除。":
+    "Once region filters are enabled, only nodes with recognized regions can match. When invert filter is enabled, the listed regions are excluded.",
   "每行一个 header，例如 Authorization": "One header per line, e.g. Authorization",
   "输入地址查看命中规则和请求头。": "Enter URL to view matched rule and headers.",
   "命中前缀：": "Matched prefix:",

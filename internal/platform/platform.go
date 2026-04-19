@@ -165,7 +165,7 @@ func (p *Platform) evaluateNode(
 	// 4. Region filter (when configured).
 	if len(p.RegionFilters) > 0 {
 		region := entry.GetRegion(geoLookup)
-		if !matchRegion(region, p.RegionFilters, p.RegionFilterInvert) {
+		if !MatchRegionFilter(region, p.RegionFilters, p.RegionFilterInvert) {
 			return false
 		}
 	}
@@ -178,8 +178,16 @@ func (p *Platform) evaluateNode(
 	return true
 }
 
-// matchRegion checks if the region is in the allowed list.
-func matchRegion(region string, allowed []string, invert bool) bool {
+// MatchRegionFilter checks whether region matches the configured region filters.
+// When region filters are configured, nodes with unknown regions never match.
+func MatchRegionFilter(region string, allowed []string, invert bool) bool {
+	if len(allowed) == 0 {
+		return true
+	}
+	if region == "" {
+		return false
+	}
+
 	matched := slices.Contains(allowed, region)
 	if invert {
 		return !matched

@@ -214,6 +214,21 @@ func TestPlatform_EvaluateNode_RegionFilterInvert(t *testing.T) {
 	}
 }
 
+func TestPlatform_EvaluateNode_RegionFilterInvert_UnknownRegionDenied(t *testing.T) {
+	p := NewPlatform("p1", "Test", nil, []string{"jp"}, true)
+	h := makeHash(`{"type":"ss"}`)
+	entry := makeFullyRoutableEntry(h, "sub1")
+
+	geoLookup := func(netip.Addr) string { return "" }
+	p.FullRebuild(func(fn func(node.Hash, *node.NodeEntry) bool) {
+		fn(h, entry)
+	}, alwaysLookup, geoLookup)
+
+	if p.View().Size() != 0 {
+		t.Fatal("node with unknown region should not be routable when region filters are configured")
+	}
+}
+
 func TestPlatform_EvaluateNode_RegionFilter_NoEgressIP(t *testing.T) {
 	p := NewPlatform("p1", "Test", nil, []string{"us"})
 	h := makeHash(`{"type":"ss"}`)

@@ -496,6 +496,9 @@ export function PlatformDetailPage() {
                       <Switch id="detail-edit-region-filter-invert" {...editForm.register("region_filter_invert")} />
                       <span>{t("反向过滤：排除匹配这些地区的节点")}</span>
                     </label>
+                    <p className="muted" style={{ marginTop: 4, fontSize: 12 }}>
+                      {t("开启地区过滤后，仅已识别地区的节点会命中；打开反向过滤后，上述地区会被排除。")}
+                    </p>
                   </div>
 
                   <div className="platform-config-actions">
