@@ -133,3 +133,34 @@ func TestPreviewFilter_RegionFilterInvert_ExcludesUnknownRegion(t *testing.T) {
 		}
 	}
 }
+
+func TestPreviewFilter_SubscriptionFilters(t *testing.T) {
+	fixture := buildPreviewFilterFixture(t)
+
+	nodes, err := fixture.cp.PreviewFilter(PreviewFilterRequest{
+		PlatformSpec: &PlatformSpecFilter{
+			RegexFilters:        []string{".*"},
+			SubscriptionFilters: []string{"sub-1"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("PreviewFilter include: %v", err)
+	}
+	if len(nodes) != 3 {
+		t.Fatalf("include nodes len = %d, want 3", len(nodes))
+	}
+
+	nodes, err = fixture.cp.PreviewFilter(PreviewFilterRequest{
+		PlatformSpec: &PlatformSpecFilter{
+			RegexFilters:             []string{".*"},
+			SubscriptionFilters:      []string{"sub-1"},
+			SubscriptionFilterInvert: true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("PreviewFilter invert: %v", err)
+	}
+	if len(nodes) != 0 {
+		t.Fatalf("invert nodes len = %d, want 0", len(nodes))
+	}
+}

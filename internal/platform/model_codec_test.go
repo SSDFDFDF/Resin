@@ -21,6 +21,8 @@ func TestBuildFromModel_Success(t *testing.T) {
 		RegexFilterInvert:                true,
 		RegionFilters:                    []string{"us", "jp"},
 		RegionFilterInvert:               true,
+		SubscriptionFilters:              []string{" sub-a ", "sub-b", "sub-a"},
+		SubscriptionFilterInvert:         true,
 		ReverseProxyMissAction:           "REJECT",
 		ReverseProxyEmptyAccountBehavior: "FIXED_HEADER",
 		ReverseProxyFixedAccountHeader:   "x-account-id",
@@ -82,6 +84,12 @@ func TestBuildFromModel_Success(t *testing.T) {
 	}
 	if !plat.RegionFilterInvert {
 		t.Fatal("region filter invert should be enabled")
+	}
+	if !reflect.DeepEqual(plat.SubscriptionFilters, []string{"sub-a", "sub-b"}) {
+		t.Fatalf("subscription filters mismatch: %+v", plat.SubscriptionFilters)
+	}
+	if !plat.SubscriptionFilterInvert {
+		t.Fatal("subscription filter invert should be enabled")
 	}
 }
 
@@ -251,6 +259,16 @@ func TestValidateRegionFilters_Invalid(t *testing.T) {
 		t.Fatal("expected validation error")
 	}
 	if !strings.Contains(err.Error(), "region_filters[0]") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateSubscriptionFilters_Invalid(t *testing.T) {
+	err := ValidateSubscriptionFilters([]string{"sub-a", " "})
+	if err == nil {
+		t.Fatal("expected validation error")
+	}
+	if !strings.Contains(err.Error(), "subscription_filters[1]") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

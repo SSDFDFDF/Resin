@@ -100,6 +100,8 @@ var platformPatchAllowedFields = map[string]bool{
 	"regex_filter_invert":                  true,
 	"region_filters":                       true,
 	"region_filter_invert":                 true,
+	"subscription_filters":                 true,
+	"subscription_filter_invert":           true,
 	"reverse_proxy_miss_action":            true,
 	"reverse_proxy_empty_account_behavior": true,
 	"reverse_proxy_fixed_account_header":   true,

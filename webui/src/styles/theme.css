@@ -2456,6 +2456,68 @@ a {
   margin-top: 4px;
 }
 
+.platform-subscription-filter {
+  border: 1px solid rgba(37, 72, 120, 0.14);
+  border-radius: 10px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.platform-subscription-filter-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.platform-subscription-filter-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px;
+  max-height: 260px;
+  overflow: auto;
+  padding-top: 8px;
+}
+
+.platform-subscription-filter-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  border: 1px solid rgba(37, 72, 120, 0.12);
+  border-radius: 8px;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.platform-subscription-filter-option>span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.platform-subscription-filter-option strong,
+.platform-subscription-filter-option small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.platform-subscription-filter-option strong {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.platform-subscription-filter-option small {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.platform-subscription-filter-option-missing {
+  border-style: dashed;
+}
+
 .platform-monitor-section {
   border-color: rgba(37, 72, 120, 0.18);
   background:

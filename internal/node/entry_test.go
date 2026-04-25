@@ -193,6 +193,60 @@ func TestNodeEntry_HasEnabledSubscription(t *testing.T) {
 	}
 }
 
+func TestNodeEntry_MatchSubscriptions(t *testing.T) {
+	h := HashFromRawOptions([]byte(`{"type":"ss"}`))
+	e := NewNodeEntry(h, nil, time.Now(), 0)
+	e.AddSubscriptionID("sub-disabled")
+	e.AddSubscriptionID("sub-enabled")
+
+	lookup := func(subID string, hash Hash) (string, bool, []string, bool) {
+		switch subID {
+		case "sub-disabled":
+			return "SubDisabled", false, []string{"node-a"}, true
+		case "sub-enabled":
+			return "SubEnabled", true, []string{"node-b"}, true
+		default:
+			return "", false, nil, false
+		}
+	}
+
+	if !e.MatchSubscriptions([]string{"sub-enabled"}, lookup) {
+		t.Fatal("expected enabled subscription filter to match")
+	}
+	if e.MatchSubscriptions([]string{"sub-disabled"}, lookup) {
+		t.Fatal("disabled subscription should not match")
+	}
+	if e.MatchSubscriptions([]string{"sub-missing"}, lookup) {
+		t.Fatal("missing subscription should not match")
+	}
+}
+
+func TestNodeEntry_MatchRegexsForSubscriptions_DoesNotUseOutOfScopeTags(t *testing.T) {
+	h := HashFromRawOptions([]byte(`{"type":"ss"}`))
+	e := NewNodeEntry(h, nil, time.Now(), 0)
+	e.AddSubscriptionID("sub-a")
+	e.AddSubscriptionID("sub-b")
+
+	lookup := func(subID string, hash Hash) (string, bool, []string, bool) {
+		switch subID {
+		case "sub-a":
+			return "ProviderA", true, []string{"plain"}, true
+		case "sub-b":
+			return "ProviderB", true, []string{"premium"}, true
+		default:
+			return "", false, nil, false
+		}
+	}
+
+	regexes := []*regexp.Regexp{regexp.MustCompile("premium")}
+	if e.MatchRegexsForSubscriptions(regexes, lookup, []string{"sub-a"}, false) {
+		t.Fatal("out-of-scope subscription tags should not satisfy regex filters")
+	}
+	if !e.MatchRegexsForSubscriptions(regexes, lookup, []string{"sub-b"}, false) {
+		t.Fatal("in-scope subscription tags should satisfy regex filters")
+	}
+}
+
 func TestNodeEntry_IsDisabledBySubscriptions_AllDisabledOrMissing(t *testing.T) {
 	h := HashFromRawOptions([]byte(`{"type":"ss"}`))
 	e := NewNodeEntry(h, nil, time.Now(), 0)

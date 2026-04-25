@@ -66,6 +66,12 @@ func TestMigrateStateDB_UpgradesLegacyPlatformsColumns(t *testing.T) {
 	if ok, err := hasTableColumn(db, "platforms", "region_filter_invert"); err != nil || !ok {
 		t.Fatalf("expected migrated column region_filter_invert, ok=%v err=%v", ok, err)
 	}
+	if ok, err := hasTableColumn(db, "platforms", "subscription_filters_json"); err != nil || !ok {
+		t.Fatalf("expected migrated column subscription_filters_json, ok=%v err=%v", ok, err)
+	}
+	if ok, err := hasTableColumn(db, "platforms", "subscription_filter_invert"); err != nil || !ok {
+		t.Fatalf("expected migrated column subscription_filter_invert, ok=%v err=%v", ok, err)
+	}
 }
 
 func TestMigrateStateDB_LegacyBaselineAdvancesToLatest(t *testing.T) {
@@ -107,8 +113,8 @@ func TestMigrateStateDB_LegacyBaselineAdvancesToLatest(t *testing.T) {
 	if dirty {
 		t.Fatalf("schema_migrations dirty=true")
 	}
-	if version != stateVersionAddSubscriptionUserAgent {
-		t.Fatalf("schema_migrations version: got %d, want %d", version, stateVersionAddSubscriptionUserAgent)
+	if version != stateVersionAddPlatformSubscriptionFilters {
+		t.Fatalf("schema_migrations version: got %d, want %d", version, stateVersionAddPlatformSubscriptionFilters)
 	}
 }
 
@@ -179,8 +185,8 @@ func TestMigrateStateDB_NormalizesLegacyRandomMissAction(t *testing.T) {
 	if dirty {
 		t.Fatalf("schema_migrations dirty=true")
 	}
-	if version != stateVersionAddSubscriptionUserAgent {
-		t.Fatalf("schema_migrations version: got %d, want %d", version, stateVersionAddSubscriptionUserAgent)
+	if version != stateVersionAddPlatformSubscriptionFilters {
+		t.Fatalf("schema_migrations version: got %d, want %d", version, stateVersionAddPlatformSubscriptionFilters)
 	}
 }
 
@@ -244,6 +250,7 @@ func TestStateRepo_Platforms_CRUD(t *testing.T) {
 		ManualUnavailableAction:  string(platform.ManualUnavailableActionAutoClean),
 		ManualUnavailableGraceNs: int64(15 * time.Second),
 		RegexFilters:             []string{}, RegexFilterInvert: true, RegionFilters: []string{}, RegionFilterInvert: true,
+		SubscriptionFilters: []string{" sub-a ", "sub-b", "sub-a"}, SubscriptionFilterInvert: true,
 		ReverseProxyMissAction: "TREAT_AS_EMPTY", AllocationPolicy: "BALANCED",
 		UpdatedAtNs: now,
 	}
@@ -270,6 +277,12 @@ func TestStateRepo_Platforms_CRUD(t *testing.T) {
 	}
 	if !got.RegionFilterInvert {
 		t.Fatal("expected region_filter_invert to round-trip as true")
+	}
+	if !reflect.DeepEqual(got.SubscriptionFilters, []string{"sub-a", "sub-b"}) {
+		t.Fatalf("subscription_filters = %v, want %v", got.SubscriptionFilters, []string{"sub-a", "sub-b"})
+	}
+	if !got.SubscriptionFilterInvert {
+		t.Fatal("expected subscription_filter_invert to round-trip as true")
 	}
 	if got.StickyLeaseMode != string(platform.StickyLeaseModeManual) {
 		t.Fatalf("unexpected sticky_lease_mode: got %q, want %q", got.StickyLeaseMode, platform.StickyLeaseModeManual)
@@ -298,6 +311,12 @@ func TestStateRepo_Platforms_CRUD(t *testing.T) {
 	}
 	if !list[0].RegionFilterInvert {
 		t.Fatal("expected listed platform to keep region_filter_invert")
+	}
+	if !reflect.DeepEqual(list[0].SubscriptionFilters, []string{"sub-a", "sub-b"}) {
+		t.Fatalf("listed subscription_filters = %v, want %v", list[0].SubscriptionFilters, []string{"sub-a", "sub-b"})
+	}
+	if !list[0].SubscriptionFilterInvert {
+		t.Fatal("expected listed platform to keep subscription_filter_invert")
 	}
 
 	// Idempotent upsert (update same ID).

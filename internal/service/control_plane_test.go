@@ -628,6 +628,102 @@ func TestCreatePlatform_RegionFilterInvert(t *testing.T) {
 	}
 }
 
+func TestCreatePlatform_SubscriptionFilterIsolatesRoutableView(t *testing.T) {
+	dir := t.TempDir()
+	engine, closer, err := state.PersistenceBootstrap(
+		filepath.Join(dir, "state"),
+		filepath.Join(dir, "cache"),
+	)
+	if err != nil {
+		t.Fatalf("PersistenceBootstrap: %v", err)
+	}
+	t.Cleanup(func() { _ = closer.Close() })
+
+	subMgr := topology.NewSubscriptionManager()
+	subA := subscription.NewSubscription("sub-a", "sub-a", "https://example.com/a", true, false)
+	subB := subscription.NewSubscription("sub-b", "sub-b", "https://example.com/b", true, false)
+	subMgr.Register(subA)
+	subMgr.Register(subB)
+
+	pool := topology.NewGlobalNodePool(topology.PoolConfig{
+		SubLookup:              subMgr.Lookup,
+		GeoLookup:              func(netip.Addr) string { return "us" },
+		MaxLatencyTableEntries: 16,
+		MaxConsecutiveFailures: func() int { return 3 },
+		LatencyDecayWindow:     func() time.Duration { return 10 * time.Minute },
+	})
+
+	addRoutableNode := func(sub *subscription.Subscription, raw []byte, tag string) node.Hash {
+		h := node.HashFromRawOptions(raw)
+		pool.AddNodeFromSub(h, raw, sub.ID)
+		sub.ManagedNodes().StoreNode(h, subscription.ManagedNode{Tags: []string{tag}})
+		entry, ok := pool.GetEntry(h)
+		if !ok {
+			t.Fatalf("entry missing for %s", h.Hex())
+		}
+		outbound := testutil.NewNoopOutbound()
+		entry.Outbound.Store(&outbound)
+		entry.SetEgressIP(netip.MustParseAddr("1.2.3.4"))
+		entry.LatencyTable.LoadEntry("cloudflare.com", node.DomainLatencyStats{
+			Ewma:        50 * time.Millisecond,
+			LastUpdated: time.Now(),
+		})
+		pool.RecordResult(h, true)
+		return h
+	}
+
+	hashA := addRoutableNode(subA, []byte(`{"type":"ss","server":"1.1.1.1","port":443}`), "a")
+	hashB := addRoutableNode(subB, []byte(`{"type":"ss","server":"2.2.2.2","port":443}`), "b")
+
+	cp := &ControlPlaneService{
+		Engine: engine,
+		Pool:   pool,
+		SubMgr: subMgr,
+		EnvCfg: &config.EnvConfig{
+			DefaultPlatformStickyTTL:              30 * time.Minute,
+			DefaultPlatformRegexFilters:           []string{},
+			DefaultPlatformRegexFilterInvert:      false,
+			DefaultPlatformRegionFilters:          []string{},
+			DefaultPlatformReverseProxyMissAction: "TREAT_AS_EMPTY",
+			DefaultPlatformAllocationPolicy:       "BALANCED",
+		},
+	}
+
+	name := "sub-filter-platform"
+	created, err := cp.CreatePlatform(CreatePlatformRequest{
+		Name:                &name,
+		SubscriptionFilters: []string{subA.ID},
+	})
+	if err != nil {
+		t.Fatalf("CreatePlatform: %v", err)
+	}
+	if !reflect.DeepEqual(created.SubscriptionFilters, []string{subA.ID}) {
+		t.Fatalf("response subscription_filters = %v, want %v", created.SubscriptionFilters, []string{subA.ID})
+	}
+	if created.SubscriptionFilterInvert {
+		t.Fatal("response subscription_filter_invert should be false")
+	}
+
+	stored, err := engine.GetPlatform(created.ID)
+	if err != nil {
+		t.Fatalf("GetPlatform: %v", err)
+	}
+	if !reflect.DeepEqual(stored.SubscriptionFilters, []string{subA.ID}) {
+		t.Fatalf("stored subscription_filters = %v, want %v", stored.SubscriptionFilters, []string{subA.ID})
+	}
+
+	plat, ok := pool.GetPlatform(created.ID)
+	if !ok {
+		t.Fatalf("platform %s was not registered in pool", created.ID)
+	}
+	if !plat.View().Contains(hashA) {
+		t.Fatal("subscription-filtered platform should contain sub-a node")
+	}
+	if plat.View().Contains(hashB) {
+		t.Fatal("subscription-filtered platform should not contain sub-b node")
+	}
+}
+
 func TestCreatePlatform_ManualStickyConfigRoundTrips(t *testing.T) {
 	dir := t.TempDir()
 	engine, closer, err := state.PersistenceBootstrap(
@@ -1063,6 +1159,7 @@ func TestDeletePlatform_DoesNotDecodeCorruptPersistedFiltersJSON(t *testing.T) {
 		platformRow.Name,
 		nil,
 		nil,
+		nil,
 		platformRow.StickyTTLNs,
 		string(platform.StickyLeaseModeTTL),
 		string(platform.ManualUnavailableActionHold),
@@ -1071,6 +1168,7 @@ func TestDeletePlatform_DoesNotDecodeCorruptPersistedFiltersJSON(t *testing.T) {
 		string(platform.ReverseProxyEmptyAccountBehaviorAccountHeaderRule),
 		"",
 		platformRow.AllocationPolicy,
+		false,
 		false,
 		false,
 	))
@@ -1130,6 +1228,7 @@ func TestResetPlatformToDefault_SupportsBuiltInDefaultPlatform(t *testing.T) {
 		defaultRow.Name,
 		nil,
 		nil,
+		nil,
 		defaultRow.StickyTTLNs,
 		string(platform.StickyLeaseModeTTL),
 		string(platform.ManualUnavailableActionHold),
@@ -1138,6 +1237,7 @@ func TestResetPlatformToDefault_SupportsBuiltInDefaultPlatform(t *testing.T) {
 		string(platform.ReverseProxyEmptyAccountBehaviorAccountHeaderRule),
 		"",
 		defaultRow.AllocationPolicy,
+		false,
 		false,
 		false,
 	))
@@ -1296,6 +1396,7 @@ func TestResetPlatformToDefault_DoesNotDecodeCorruptPersistedFiltersJSON(t *test
 		platformRow.Name,
 		nil,
 		nil,
+		nil,
 		platformRow.StickyTTLNs,
 		string(platform.StickyLeaseModeTTL),
 		string(platform.ManualUnavailableActionHold),
@@ -1304,6 +1405,7 @@ func TestResetPlatformToDefault_DoesNotDecodeCorruptPersistedFiltersJSON(t *test
 		string(platform.ReverseProxyEmptyAccountBehaviorAccountHeaderRule),
 		"",
 		platformRow.AllocationPolicy,
+		false,
 		false,
 		false,
 	))

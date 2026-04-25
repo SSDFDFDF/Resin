@@ -52,6 +52,8 @@ export const platformFormSchema = z.object({
   regex_filter_invert: z.boolean(),
   region_filters_text: z.string().optional(),
   region_filter_invert: z.boolean(),
+  subscription_filters: z.array(z.string()),
+  subscription_filter_invert: z.boolean(),
   reverse_proxy_miss_action: z.enum(missActions),
   reverse_proxy_empty_account_behavior: z.enum(emptyAccountBehaviors),
   reverse_proxy_fixed_account_header: z.string().optional(),
@@ -88,6 +90,8 @@ export const defaultPlatformFormValues: PlatformFormValues = {
   regex_filter_invert: false,
   region_filters_text: "",
   region_filter_invert: false,
+  subscription_filters: [],
+  subscription_filter_invert: false,
   reverse_proxy_miss_action: "TREAT_AS_EMPTY",
   reverse_proxy_empty_account_behavior: "RANDOM",
   reverse_proxy_fixed_account_header: "Authorization",
@@ -97,6 +101,7 @@ export const defaultPlatformFormValues: PlatformFormValues = {
 export function platformToFormValues(platform: Platform): PlatformFormValues {
   const regexFilters = Array.isArray(platform.regex_filters) ? platform.regex_filters : [];
   const regionFilters = Array.isArray(platform.region_filters) ? platform.region_filters : [];
+  const subscriptionFilters = Array.isArray(platform.subscription_filters) ? platform.subscription_filters : [];
 
   return {
     name: platform.name,
@@ -108,6 +113,8 @@ export function platformToFormValues(platform: Platform): PlatformFormValues {
     regex_filter_invert: platform.regex_filter_invert,
     region_filters_text: regionFilters.join("\n"),
     region_filter_invert: platform.region_filter_invert,
+    subscription_filters: subscriptionFilters,
+    subscription_filter_invert: platform.subscription_filter_invert,
     reverse_proxy_miss_action: platform.reverse_proxy_miss_action,
     reverse_proxy_empty_account_behavior: platform.reverse_proxy_empty_account_behavior,
     reverse_proxy_fixed_account_header: platform.reverse_proxy_fixed_account_header,
@@ -126,6 +133,8 @@ function toPlatformPayloadBase(values: PlatformFormValues) {
     regex_filter_invert: values.regex_filter_invert,
     region_filters: parseLinesToList(values.region_filters_text, (value) => value.toLowerCase()),
     region_filter_invert: values.region_filter_invert,
+    subscription_filters: values.subscription_filters,
+    subscription_filter_invert: values.subscription_filter_invert,
     reverse_proxy_miss_action: values.reverse_proxy_miss_action,
     reverse_proxy_empty_account_behavior: values.reverse_proxy_empty_account_behavior,
     reverse_proxy_fixed_account_header: parseHeaderLines(values.reverse_proxy_fixed_account_header).join("\n"),
@@ -174,6 +183,8 @@ export function platformFormValuesFromEnvConfig(env: EnvConfig): PlatformFormVal
     regex_filter_invert: env.default_platform_regex_filter_invert,
     region_filters_text: (env.default_platform_region_filters ?? []).join("\n"),
     region_filter_invert: env.default_platform_region_filter_invert,
+    subscription_filters: [],
+    subscription_filter_invert: false,
     reverse_proxy_miss_action: asMissAction(env.default_platform_reverse_proxy_miss_action),
     reverse_proxy_empty_account_behavior: asEmptyAccountBehavior(env.default_platform_reverse_proxy_empty_account_behavior),
     reverse_proxy_fixed_account_header: env.default_platform_reverse_proxy_fixed_account_header,
@@ -212,6 +223,12 @@ export function toPlatformCreateInput(
   }
   if (current.region_filter_invert !== baseline.region_filter_invert) {
     payload.region_filter_invert = current.region_filter_invert;
+  }
+  if (!areStringSlicesEqual(current.subscription_filters, baseline.subscription_filters)) {
+    payload.subscription_filters = current.subscription_filters;
+  }
+  if (current.subscription_filter_invert !== baseline.subscription_filter_invert) {
+    payload.subscription_filter_invert = current.subscription_filter_invert;
   }
   if (current.reverse_proxy_miss_action !== baseline.reverse_proxy_miss_action) {
     payload.reverse_proxy_miss_action = current.reverse_proxy_miss_action;

@@ -922,6 +922,54 @@ func TestAPIContract_PlatformRegionFilterInvert(t *testing.T) {
 	}
 }
 
+func TestAPIContract_PlatformSubscriptionFilters(t *testing.T) {
+	srv, _, _ := newControlPlaneTestServer(t)
+
+	rec := doJSONRequest(t, srv, http.MethodPost, "/api/v1/platforms", map[string]any{
+		"name":                       "Subscription-Scoped",
+		"subscription_filters":       []string{" sub-a ", "sub-b", "sub-a"},
+		"subscription_filter_invert": true,
+	}, true)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create subscription-filtered platform status: got %d, want %d, body=%s", rec.Code, http.StatusCreated, rec.Body.String())
+	}
+	body := decodeJSONMap(t, rec)
+	filters, ok := body["subscription_filters"].([]any)
+	if !ok {
+		t.Fatalf("subscription_filters type: got %T, body=%s", body["subscription_filters"], rec.Body.String())
+	}
+	if len(filters) != 2 || filters[0] != "sub-a" || filters[1] != "sub-b" {
+		t.Fatalf("subscription_filters = %v, want [sub-a sub-b]", filters)
+	}
+	if body["subscription_filter_invert"] != true {
+		t.Fatalf("subscription_filter_invert: got %v, want true", body["subscription_filter_invert"])
+	}
+
+	id, _ := body["id"].(string)
+	if id == "" {
+		t.Fatalf("missing id: body=%s", rec.Body.String())
+	}
+
+	rec = doJSONRequest(t, srv, http.MethodPatch, "/api/v1/platforms/"+id, map[string]any{
+		"subscription_filters":       []string{"sub-c"},
+		"subscription_filter_invert": false,
+	}, true)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("patch subscription-filtered platform status: got %d, want %d, body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	body = decodeJSONMap(t, rec)
+	filters, ok = body["subscription_filters"].([]any)
+	if !ok {
+		t.Fatalf("patched subscription_filters type: got %T, body=%s", body["subscription_filters"], rec.Body.String())
+	}
+	if len(filters) != 1 || filters[0] != "sub-c" {
+		t.Fatalf("patched subscription_filters = %v, want [sub-c]", filters)
+	}
+	if body["subscription_filter_invert"] != false {
+		t.Fatalf("patched subscription_filter_invert: got %v, want false", body["subscription_filter_invert"])
+	}
+}
+
 func TestAPIContract_PlatformStickyTTLMustBePositive(t *testing.T) {
 	srv, _, _ := newControlPlaneTestServer(t)
 

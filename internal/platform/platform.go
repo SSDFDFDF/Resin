@@ -30,10 +30,12 @@ type Platform struct {
 	Name string
 
 	// Filter configuration.
-	RegexFilters       []*regexp.Regexp
-	RegexFilterInvert  bool
-	RegionFilters      []string // lowercase ISO codes
-	RegionFilterInvert bool
+	RegexFilters             []*regexp.Regexp
+	RegexFilterInvert        bool
+	RegionFilters            []string // lowercase ISO codes
+	RegionFilterInvert       bool
+	SubscriptionFilters      []string // subscription IDs
+	SubscriptionFilterInvert bool
 
 	// Other config fields.
 	StickyTTLNs                      int64
@@ -148,7 +150,12 @@ func (p *Platform) evaluateNode(
 	}
 
 	// 2. Tag regex match.
-	regexMatched := entry.MatchRegexs(p.RegexFilters, subLookup)
+	regexMatched := entry.MatchRegexsForSubscriptions(
+		p.RegexFilters,
+		subLookup,
+		p.SubscriptionFilters,
+		p.SubscriptionFilterInvert,
+	)
 	if len(p.RegexFilters) > 0 && p.RegexFilterInvert {
 		regexMatched = !regexMatched
 	}
@@ -156,13 +163,24 @@ func (p *Platform) evaluateNode(
 		return false
 	}
 
-	// 3. Egress IP must be known.
+	// 3. Subscription filter (when configured).
+	if len(p.SubscriptionFilters) > 0 {
+		matched := entry.MatchSubscriptions(p.SubscriptionFilters, subLookup)
+		if p.SubscriptionFilterInvert {
+			matched = !matched
+		}
+		if !matched {
+			return false
+		}
+	}
+
+	// 4. Egress IP must be known.
 	egressIP := entry.GetEgressIP()
 	if !egressIP.IsValid() {
 		return false
 	}
 
-	// 4. Region filter (when configured).
+	// 5. Region filter (when configured).
 	if len(p.RegionFilters) > 0 {
 		region := entry.GetRegion(geoLookup)
 		if !MatchRegionFilter(region, p.RegionFilters, p.RegionFilterInvert) {
@@ -170,7 +188,7 @@ func (p *Platform) evaluateNode(
 		}
 	}
 
-	// 5. Has at least one latency record.
+	// 6. Has at least one latency record.
 	if !entry.HasLatency() {
 		return false
 	}

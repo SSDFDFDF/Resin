@@ -3,11 +3,16 @@ import type { PageResponse, LeaseResponse, Platform, PlatformCreateInput, Platfo
 
 const basePath = "/api/v1/platforms";
 
-type ApiPlatform = Omit<Platform, "regex_filters" | "regex_filter_invert" | "region_filters" | "region_filter_invert"> & {
+type ApiPlatform = Omit<
+  Platform,
+  "regex_filters" | "regex_filter_invert" | "region_filters" | "region_filter_invert" | "subscription_filters" | "subscription_filter_invert"
+> & {
   regex_filters?: string[] | null;
   regex_filter_invert?: boolean | null;
   region_filters?: string[] | null;
   region_filter_invert?: boolean | null;
+  subscription_filters?: string[] | null;
+  subscription_filter_invert?: boolean | null;
   sticky_lease_mode?: Platform["sticky_lease_mode"] | null;
   manual_unavailable_action?: Platform["manual_unavailable_action"] | null;
   manual_unavailable_grace?: string | null;
@@ -35,6 +40,8 @@ function normalizePlatform(raw: ApiPlatform): Platform {
     regex_filter_invert: raw.regex_filter_invert === true,
     region_filters: Array.isArray(raw.region_filters) ? raw.region_filters : [],
     region_filter_invert: raw.region_filter_invert === true,
+    subscription_filters: Array.isArray(raw.subscription_filters) ? raw.subscription_filters : [],
+    subscription_filter_invert: raw.subscription_filter_invert === true,
     routable_node_count: typeof raw.routable_node_count === "number" ? raw.routable_node_count : 0,
     reverse_proxy_empty_account_behavior:
       raw.reverse_proxy_empty_account_behavior === "RANDOM" ||

@@ -19,15 +19,16 @@ const (
 	// Keep these version markers in sync with SQL files under migrations/state/.
 	// stateLegacyBaselineVersion must remain fixed to the highest migration
 	// version covered by compatibility detection for pre-migrate databases.
-	stateVersionBaseSchema               = 1
-	stateVersionAddEmptyAccountBehavior  = 2
-	stateVersionAddFixedAccountHeader    = 3
-	stateVersionNormalizeMissAction      = 4
-	stateVersionAddRegionFilterInvert    = 5
-	stateVersionAddStickyLeaseControls   = 6
-	stateVersionAddRegexFilterInvert     = 7
-	stateVersionAddSubscriptionUserAgent = 8
-	stateLegacyBaselineVersion           = stateVersionAddFixedAccountHeader
+	stateVersionBaseSchema                     = 1
+	stateVersionAddEmptyAccountBehavior        = 2
+	stateVersionAddFixedAccountHeader          = 3
+	stateVersionNormalizeMissAction            = 4
+	stateVersionAddRegionFilterInvert          = 5
+	stateVersionAddStickyLeaseControls         = 6
+	stateVersionAddRegexFilterInvert           = 7
+	stateVersionAddSubscriptionUserAgent       = 8
+	stateVersionAddPlatformSubscriptionFilters = 9
+	stateLegacyBaselineVersion                 = stateVersionAddFixedAccountHeader
 )
 
 //go:embed migrations/state/*.sql migrations/cache/*.sql
@@ -135,6 +136,14 @@ func prepareLegacyStateBaseline(db *sql.DB, driver migratedb.Driver) error {
 	if err != nil {
 		return err
 	}
+	hasPlatformSubscriptionFilters, err := hasTableColumn(db, "platforms", "subscription_filters_json")
+	if err != nil {
+		return err
+	}
+	hasPlatformSubscriptionFilterInvert, err := hasTableColumn(db, "platforms", "subscription_filter_invert")
+	if err != nil {
+		return err
+	}
 	hasSubscriptionUserAgent := false
 	if hasSubscriptions {
 		hasSubscriptionUserAgent, err = hasTableColumn(db, "subscriptions", "user_agent")
@@ -144,6 +153,38 @@ func prepareLegacyStateBaseline(db *sql.DB, driver migratedb.Driver) error {
 	}
 
 	switch {
+	case hasEmptyBehavior && hasFixedHeader && hasRegionFilterInvert && hasRegexFilterInvert &&
+		hasStickyLeaseMode && hasManualUnavailableAction && hasManualUnavailableGrace &&
+		hasSubscriptionUserAgent && hasPlatformSubscriptionFilters && hasPlatformSubscriptionFilterInvert:
+		return setMigrationVersion(driver, stateVersionAddPlatformSubscriptionFilters)
+	case hasEmptyBehavior && hasFixedHeader && hasRegionFilterInvert && hasRegexFilterInvert &&
+		hasStickyLeaseMode && hasManualUnavailableAction && hasManualUnavailableGrace &&
+		(hasPlatformSubscriptionFilters || hasPlatformSubscriptionFilterInvert):
+		if err := ensureTableColumn(
+			db,
+			"platforms",
+			"subscription_filters_json",
+			`subscription_filters_json TEXT NOT NULL DEFAULT '[]'`,
+		); err != nil {
+			return err
+		}
+		if err := ensureTableColumn(
+			db,
+			"platforms",
+			"subscription_filter_invert",
+			`subscription_filter_invert INTEGER NOT NULL DEFAULT 0`,
+		); err != nil {
+			return err
+		}
+		if err := ensureTableColumn(
+			db,
+			"subscriptions",
+			"user_agent",
+			`user_agent TEXT NOT NULL DEFAULT ''`,
+		); err != nil {
+			return err
+		}
+		return setMigrationVersion(driver, stateVersionAddPlatformSubscriptionFilters)
 	case hasEmptyBehavior && hasFixedHeader && hasRegionFilterInvert && hasRegexFilterInvert &&
 		hasStickyLeaseMode && hasManualUnavailableAction && hasManualUnavailableGrace:
 		if hasSubscriptionUserAgent {

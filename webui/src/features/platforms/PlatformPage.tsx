@@ -39,6 +39,7 @@ import {
   toPlatformCreateInput,
   type PlatformFormValues,
 } from "./formModel";
+import { PlatformSubscriptionFilterField } from "./PlatformSubscriptionFilterField";
 import type { Platform } from "./types";
 
 const ZERO_UUID = "00000000-0000-0000-0000-000000000000";
@@ -98,6 +99,8 @@ export function PlatformPage() {
   });
   const createEmptyAccountBehavior = createForm.watch("reverse_proxy_empty_account_behavior");
   const createStickyLeaseMode = createForm.watch("sticky_lease_mode");
+  const createSubscriptionFilters = createForm.watch("subscription_filters");
+  const createSubscriptionFilterInvert = createForm.watch("subscription_filter_invert");
 
   useEffect(() => {
     if (!envCreateDefaults) {
@@ -216,6 +219,7 @@ export function PlatformPage() {
           {platforms.map((platform) => {
             const regionCount = platform.region_filters.length;
             const regexCount = platform.regex_filters.length;
+            const subscriptionFilterCount = platform.subscription_filters.length;
             const stickySummary = platform.sticky_lease_mode === "MANUAL"
               ? t("手动长租约")
               : formatGoDuration(platform.sticky_ttl, t("默认"));
@@ -241,6 +245,10 @@ export function PlatformPage() {
                   <span className="platform-fact">
                     <span>{t("正则")}</span>
                     <strong>{regexCount}</strong>
+                  </span>
+                  <span className="platform-fact">
+                    <span>{t("订阅源")}</span>
+                    <strong>{subscriptionFilterCount}</strong>
                   </span>
                   <span className="platform-fact">
                   <span>{t("租约时长")}</span>
@@ -451,6 +459,14 @@ export function PlatformPage() {
                   {t("开启地区过滤后，仅已识别地区的节点会命中；打开反向过滤后，上述地区会被排除。")}
                 </p>
               </div>
+
+              <PlatformSubscriptionFilterField
+                idPrefix="create"
+                selectedIds={createSubscriptionFilters}
+                invert={createSubscriptionFilterInvert}
+                onSelectedIdsChange={(ids) => createForm.setValue("subscription_filters", ids, { shouldDirty: true, shouldValidate: true })}
+                onInvertChange={(invert) => createForm.setValue("subscription_filter_invert", invert, { shouldDirty: true, shouldValidate: true })}
+              />
 
               <div className="detail-actions">
                 <Button type="submit" disabled={createMutation.isPending || !createDefaults}>

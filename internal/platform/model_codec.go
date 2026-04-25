@@ -25,6 +25,30 @@ func ValidateRegionFilters(regionFilters []string) error {
 	return nil
 }
 
+// NormalizeSubscriptionFilters trims subscription IDs and removes duplicates.
+func NormalizeSubscriptionFilters(subscriptionFilters []string) ([]string, error) {
+	normalized := make([]string, 0, len(subscriptionFilters))
+	seen := make(map[string]struct{}, len(subscriptionFilters))
+	for i, raw := range subscriptionFilters {
+		id := strings.TrimSpace(raw)
+		if id == "" {
+			return nil, fmt.Errorf("subscription_filters[%d]: must be a non-empty subscription ID", i)
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		normalized = append(normalized, id)
+	}
+	return normalized, nil
+}
+
+// ValidateSubscriptionFilters validates subscription filter IDs.
+func ValidateSubscriptionFilters(subscriptionFilters []string) error {
+	_, err := NormalizeSubscriptionFilters(subscriptionFilters)
+	return err
+}
+
 // CompileRegexFilters compiles regex filters in order.
 func CompileRegexFilters(regexFilters []string) ([]*regexp.Regexp, error) {
 	compiled := make([]*regexp.Regexp, 0, len(regexFilters))
@@ -43,6 +67,7 @@ func NewConfiguredPlatform(
 	id, name string,
 	regexFilters []*regexp.Regexp,
 	regionFilters []string,
+	subscriptionFilters []string,
 	stickyTTLNs int64,
 	stickyLeaseMode string,
 	manualUnavailableAction string,
@@ -53,6 +78,7 @@ func NewConfiguredPlatform(
 	allocationPolicy string,
 	regexFilterInvert bool,
 	regionFilterInvert bool,
+	subscriptionFilterInvert bool,
 ) *Platform {
 	normalizedFixedHeaders, fixedHeaders, err := NormalizeFixedAccountHeaders(fixedAccountHeader)
 	if err != nil {
@@ -60,6 +86,8 @@ func NewConfiguredPlatform(
 		fixedHeaders = nil
 	}
 	plat := NewPlatform(id, name, regexFilters, regionFilters, regexFilterInvert, regionFilterInvert)
+	plat.SubscriptionFilters = append([]string(nil), subscriptionFilters...)
+	plat.SubscriptionFilterInvert = subscriptionFilterInvert
 	plat.StickyTTLNs = stickyTTLNs
 	plat.StickyLeaseMode = string(NormalizeStickyLeaseMode(stickyLeaseMode))
 	plat.ManualUnavailableAction = string(NormalizeManualUnavailableAction(manualUnavailableAction))
@@ -91,6 +119,10 @@ func BuildFromModel(mp model.Platform) (*Platform, error) {
 		return nil, err
 	}
 	if err := ValidateRegionFilters(mp.RegionFilters); err != nil {
+		return nil, err
+	}
+	subscriptionFilters, err := NormalizeSubscriptionFilters(mp.SubscriptionFilters)
+	if err != nil {
 		return nil, err
 	}
 	emptyAccountBehavior := mp.ReverseProxyEmptyAccountBehavior
@@ -142,6 +174,7 @@ func BuildFromModel(mp model.Platform) (*Platform, error) {
 		mp.Name,
 		regexFilters,
 		append([]string(nil), mp.RegionFilters...),
+		subscriptionFilters,
 		mp.StickyTTLNs,
 		string(stickyLeaseMode),
 		string(manualUnavailableAction),
@@ -152,5 +185,6 @@ func BuildFromModel(mp model.Platform) (*Platform, error) {
 		mp.AllocationPolicy,
 		mp.RegexFilterInvert,
 		mp.RegionFilterInvert,
+		mp.SubscriptionFilterInvert,
 	), nil
 }

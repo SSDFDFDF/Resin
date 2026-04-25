@@ -118,10 +118,7 @@ func (e *NodeEntry) MatchRegexs(regexes []*regexp.Regexp, subLookup SubLookupFun
 		return len(regexes) == 0
 	}
 
-	e.mu.RLock()
-	subs := make([]string, len(e.subscriptionIDs))
-	copy(subs, e.subscriptionIDs)
-	e.mu.RUnlock()
+	subs := e.subscriptionIDsSnapshot()
 
 	if len(regexes) == 0 {
 		for _, subID := range subs {
@@ -153,6 +150,56 @@ func (e *NodeEntry) MatchRegexs(regexes []*regexp.Regexp, subLookup SubLookupFun
 	return false
 }
 
+// MatchRegexsForSubscriptions is like MatchRegexs, but only subscription
+// references inside the platform subscription filter scope may contribute tags.
+func (e *NodeEntry) MatchRegexsForSubscriptions(
+	regexes []*regexp.Regexp,
+	subLookup SubLookupFunc,
+	subscriptionIDs []string,
+	subscriptionFilterInvert bool,
+) bool {
+	if len(subscriptionIDs) == 0 {
+		return e.MatchRegexs(regexes, subLookup)
+	}
+	if e == nil {
+		return false
+	}
+
+	filterSet := subscriptionFilterSet(subscriptionIDs)
+	if len(filterSet) == 0 {
+		return e.MatchRegexs(regexes, subLookup)
+	}
+
+	subs := e.subscriptionIDsSnapshot()
+	if len(subs) == 0 {
+		return false
+	}
+
+	if subLookup == nil {
+		return len(regexes) == 0 && hasSubscriptionInScope(subs, filterSet, subscriptionFilterInvert)
+	}
+
+	for _, subID := range subs {
+		if !subscriptionIDInScope(subID, filterSet, subscriptionFilterInvert) {
+			continue
+		}
+		name, enabled, tags, ok := subLookup(subID, e.Hash)
+		if !ok || !enabled {
+			continue
+		}
+		if len(regexes) == 0 {
+			return true
+		}
+		for _, tag := range tags {
+			candidate := name + "/" + tag
+			if matchesAll(candidate, regexes) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // HasEnabledSubscription reports whether the node currently has at least one
 // enabled subscription reference, based on subLookup.
 //
@@ -163,12 +210,51 @@ func (e *NodeEntry) HasEnabledSubscription(subLookup SubLookupFunc) bool {
 		return false
 	}
 
+	subs := e.subscriptionIDsSnapshot()
+
+	for _, subID := range subs {
+		_, enabled, _, ok := subLookup(subID, e.Hash)
+		if ok && enabled {
+			return true
+		}
+	}
+	return false
+}
+
+// MatchSubscriptions reports whether the node belongs to any configured
+// subscription ID that is currently enabled and still holds this node.
+func (e *NodeEntry) MatchSubscriptions(subscriptionIDs []string, subLookup SubLookupFunc) bool {
+	if e == nil || len(subscriptionIDs) == 0 {
+		return true
+	}
+
 	e.mu.RLock()
 	subs := make([]string, len(e.subscriptionIDs))
 	copy(subs, e.subscriptionIDs)
 	e.mu.RUnlock()
 
+	if len(subs) == 0 {
+		return false
+	}
+
+	allowed := subscriptionFilterSet(subscriptionIDs)
+	if len(allowed) == 0 {
+		return true
+	}
+
+	if subLookup == nil {
+		for _, subID := range subs {
+			if _, ok := allowed[subID]; ok {
+				return true
+			}
+		}
+		return false
+	}
+
 	for _, subID := range subs {
+		if _, ok := allowed[subID]; !ok {
+			continue
+		}
 		_, enabled, _, ok := subLookup(subID, e.Hash)
 		if ok && enabled {
 			return true
@@ -182,6 +268,44 @@ func (e *NodeEntry) HasEnabledSubscription(subLookup SubLookupFunc) bool {
 // by subLookup semantics).
 func (e *NodeEntry) IsDisabledBySubscriptions(subLookup SubLookupFunc) bool {
 	return !e.HasEnabledSubscription(subLookup)
+}
+
+func (e *NodeEntry) subscriptionIDsSnapshot() []string {
+	if e == nil {
+		return nil
+	}
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	subs := make([]string, len(e.subscriptionIDs))
+	copy(subs, e.subscriptionIDs)
+	return subs
+}
+
+func subscriptionFilterSet(subscriptionIDs []string) map[string]struct{} {
+	allowed := make(map[string]struct{}, len(subscriptionIDs))
+	for _, id := range subscriptionIDs {
+		if id != "" {
+			allowed[id] = struct{}{}
+		}
+	}
+	return allowed
+}
+
+func subscriptionIDInScope(subID string, filterSet map[string]struct{}, invert bool) bool {
+	_, inFilter := filterSet[subID]
+	if invert {
+		return !inFilter
+	}
+	return inFilter
+}
+
+func hasSubscriptionInScope(subs []string, filterSet map[string]struct{}, invert bool) bool {
+	for _, subID := range subs {
+		if subscriptionIDInScope(subID, filterSet, invert) {
+			return true
+		}
+	}
+	return false
 }
 
 // matchesAll returns true if s matches every regex in the list.

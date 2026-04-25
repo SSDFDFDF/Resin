@@ -38,6 +38,7 @@ import {
   type PlatformFormValues,
 } from "./formModel";
 import { PlatformMonitorPanel } from "./PlatformMonitorPanel";
+import { PlatformSubscriptionFilterField } from "./PlatformSubscriptionFilterField";
 import { LeaseTab } from "./LeaseTab";
 
 type PlatformDetailTab = "monitor" | "config" | "leases" | "ops";
@@ -81,6 +82,8 @@ export function PlatformDetailPage() {
   });
   const detailEmptyAccountBehavior = editForm.watch("reverse_proxy_empty_account_behavior");
   const detailStickyLeaseMode = editForm.watch("sticky_lease_mode");
+  const detailSubscriptionFilters = editForm.watch("subscription_filters");
+  const detailSubscriptionFilterInvert = editForm.watch("subscription_filter_invert");
 
   useEffect(() => {
     if (!platform) {
@@ -175,6 +178,7 @@ export function PlatformDetailPage() {
     : t("默认");
   const regionCount = platform?.region_filters.length ?? 0;
   const regexCount = platform?.regex_filters.length ?? 0;
+  const subscriptionFilterCount = platform?.subscription_filters.length ?? 0;
   const deleteDisabled = !platform || platform.id === ZERO_UUID || deleteMutation.isPending;
 
   return (
@@ -242,6 +246,10 @@ export function PlatformDetailPage() {
                 <span className="platform-fact">
                   <span>{t("正则")}</span>
                   <strong>{regexCount}</strong>
+                </span>
+                <span className="platform-fact">
+                  <span>{t("订阅源")}</span>
+                  <strong>{subscriptionFilterCount}</strong>
                 </span>
                 <span className="platform-fact">
                   <span>{t("租约时长")}</span>
@@ -500,6 +508,14 @@ export function PlatformDetailPage() {
                       {t("开启地区过滤后，仅已识别地区的节点会命中；打开反向过滤后，上述地区会被排除。")}
                     </p>
                   </div>
+
+                  <PlatformSubscriptionFilterField
+                    idPrefix="detail-edit"
+                    selectedIds={detailSubscriptionFilters}
+                    invert={detailSubscriptionFilterInvert}
+                    onSelectedIdsChange={(ids) => editForm.setValue("subscription_filters", ids, { shouldDirty: true, shouldValidate: true })}
+                    onInvertChange={(invert) => editForm.setValue("subscription_filter_invert", invert, { shouldDirty: true, shouldValidate: true })}
+                  />
 
                   <div className="platform-config-actions">
                     <Button type="submit" disabled={updateMutation.isPending}>

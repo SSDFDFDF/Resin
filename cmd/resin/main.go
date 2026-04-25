@@ -461,6 +461,8 @@ func ensureDefaultPlatform(
 		RegexFilterInvert:                envCfg.DefaultPlatformRegexFilterInvert,
 		RegionFilters:                    append([]string(nil), envCfg.DefaultPlatformRegionFilters...),
 		RegionFilterInvert:               envCfg.DefaultPlatformRegionFilterInvert,
+		SubscriptionFilters:              []string{},
+		SubscriptionFilterInvert:         false,
 		ReverseProxyMissAction:           envCfg.DefaultPlatformReverseProxyMissAction,
 		ReverseProxyEmptyAccountBehavior: envCfg.DefaultPlatformReverseProxyEmptyAccountBehavior,
 		ReverseProxyFixedAccountHeader:   envCfg.DefaultPlatformReverseProxyFixedAccountHeader,

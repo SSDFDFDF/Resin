@@ -15,6 +15,8 @@ type Platform struct {
 	RegexFilterInvert                bool
 	RegionFilters                    []string
 	RegionFilterInvert               bool
+	SubscriptionFilters              []string
+	SubscriptionFilterInvert         bool
 	ReverseProxyMissAction           string `json:"reverse_proxy_miss_action"`
 	ReverseProxyEmptyAccountBehavior string `json:"reverse_proxy_empty_account_behavior"`
 	ReverseProxyFixedAccountHeader   string `json:"reverse_proxy_fixed_account_header"`

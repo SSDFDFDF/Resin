@@ -167,6 +167,101 @@ func TestPlatform_EvaluateNode_RegexFilterInvert(t *testing.T) {
 	}
 }
 
+func TestPlatform_EvaluateNode_SubscriptionFilter(t *testing.T) {
+	p := NewPlatform("p1", "Test", nil, nil)
+	p.SubscriptionFilters = []string{"sub-allowed"}
+	h := makeHash(`{"type":"ss"}`)
+	entry := makeFullyRoutableEntry(h, "sub-denied", "sub-allowed")
+
+	lookup := func(subID string, hash node.Hash) (string, bool, []string, bool) {
+		switch subID {
+		case "sub-allowed":
+			return "Allowed", true, []string{"node"}, true
+		case "sub-denied":
+			return "Denied", true, []string{"node"}, true
+		default:
+			return "", false, nil, false
+		}
+	}
+
+	p.FullRebuild(func(fn func(node.Hash, *node.NodeEntry) bool) {
+		fn(h, entry)
+	}, lookup, usGeoLookup)
+
+	if p.View().Size() != 1 {
+		t.Fatal("node from allowed subscription should be routable")
+	}
+
+	p2 := NewPlatform("p2", "Test", nil, nil)
+	p2.SubscriptionFilters = []string{"sub-other"}
+	p2.FullRebuild(func(fn func(node.Hash, *node.NodeEntry) bool) {
+		fn(h, entry)
+	}, lookup, usGeoLookup)
+	if p2.View().Size() != 0 {
+		t.Fatal("node outside subscription filter should not be routable")
+	}
+}
+
+func TestPlatform_EvaluateNode_SubscriptionFilterInvert(t *testing.T) {
+	p := NewPlatform("p1", "Test", nil, nil)
+	p.SubscriptionFilters = []string{"sub-denied"}
+	p.SubscriptionFilterInvert = true
+	h := makeHash(`{"type":"ss"}`)
+	entry := makeFullyRoutableEntry(h, "sub-allowed")
+
+	p.FullRebuild(func(fn func(node.Hash, *node.NodeEntry) bool) {
+		fn(h, entry)
+	}, alwaysLookup, usGeoLookup)
+
+	if p.View().Size() != 1 {
+		t.Fatal("subscription invert should allow non-matching node")
+	}
+
+	p2 := NewPlatform("p2", "Test", nil, nil)
+	p2.SubscriptionFilters = []string{"sub-allowed"}
+	p2.SubscriptionFilterInvert = true
+	p2.FullRebuild(func(fn func(node.Hash, *node.NodeEntry) bool) {
+		fn(h, entry)
+	}, alwaysLookup, usGeoLookup)
+	if p2.View().Size() != 0 {
+		t.Fatal("subscription invert should deny matching node")
+	}
+}
+
+func TestPlatform_EvaluateNode_SubscriptionFilterScopesRegexTags(t *testing.T) {
+	p := NewPlatform("p1", "Test", []*regexp.Regexp{regexp.MustCompile("premium")}, nil)
+	p.SubscriptionFilters = []string{"sub-a"}
+	h := makeHash(`{"type":"ss"}`)
+	entry := makeFullyRoutableEntry(h, "sub-a", "sub-b")
+
+	lookup := func(subID string, hash node.Hash) (string, bool, []string, bool) {
+		switch subID {
+		case "sub-a":
+			return "ProviderA", true, []string{"plain"}, true
+		case "sub-b":
+			return "ProviderB", true, []string{"premium"}, true
+		default:
+			return "", false, nil, false
+		}
+	}
+
+	p.FullRebuild(func(fn func(node.Hash, *node.NodeEntry) bool) {
+		fn(h, entry)
+	}, lookup, usGeoLookup)
+	if p.View().Size() != 0 {
+		t.Fatal("regex tags from out-of-scope subscriptions should not make node routable")
+	}
+
+	p2 := NewPlatform("p2", "Test", []*regexp.Regexp{regexp.MustCompile("premium")}, nil)
+	p2.SubscriptionFilters = []string{"sub-b"}
+	p2.FullRebuild(func(fn func(node.Hash, *node.NodeEntry) bool) {
+		fn(h, entry)
+	}, lookup, usGeoLookup)
+	if p2.View().Size() != 1 {
+		t.Fatal("regex tags from in-scope subscriptions should make node routable")
+	}
+}
+
 func TestPlatform_EvaluateNode_RegionFilter(t *testing.T) {
 	p := NewPlatform("p1", "Test", nil, []string{"us"})
 	h := makeHash(`{"type":"ss"}`)
