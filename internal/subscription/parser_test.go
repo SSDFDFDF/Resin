@@ -2775,3 +2775,111 @@ func containsAnyString(values []any, expected string) bool {
 	}
 	return false
 }
+
+func TestParseGeneralSubscription_ClashSSWithShadowTLS(t *testing.T) {
+	data := []byte(`
+proxies:
+  - name: "🇸🇬 SG 07"
+    type: ss
+    server: tqt-ss.ftnode369.com
+    port: 29907
+    cipher: 2022-blake3-aes-256-gcm
+    password: YjZiNDhjMDg2MWYxOTU3MDA2MTM2YjkzYTg0NzFlMGY=:MzhhOWVhZGt0ODcxNS00M2I1LThkZmMtNTdmMDFmMjQ=
+    plugin: shadow-tls
+    plugin-opts:
+      host: gateway.icloud.com
+      password: test-shadowtls-password
+      version: 3
+`)
+
+	nodes, err := ParseGeneralSubscription(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(nodes) != 1 {
+		t.Fatalf("expected 1 node, got %d", len(nodes))
+	}
+	if nodes[0].Tag != "🇸🇬 SG 07" {
+		t.Fatalf("expected tag 🇸🇬 SG 07, got %s", nodes[0].Tag)
+	}
+
+	obj := parseNodeRaw(t, nodes[0].RawOptions)
+	if obj["type"] != "shadowsocks" {
+		t.Fatalf("expected type shadowsocks, got %v", obj["type"])
+	}
+	if obj["plugin"] != "shadow-tls" {
+		t.Fatalf("expected plugin shadow-tls, got %v", obj["plugin"])
+	}
+	opts, _ := obj["plugin_opts"].(string)
+	if !strings.Contains(opts, "host=gateway.icloud.com") {
+		t.Fatalf("expected host=gateway.icloud.com in plugin_opts, got %s", opts)
+	}
+	if !strings.Contains(opts, "password=test-shadowtls-password") {
+		t.Fatalf("expected password=test-shadowtls-password in plugin_opts, got %s", opts)
+	}
+	if !strings.Contains(opts, "version=3") {
+		t.Fatalf("expected version=3 in plugin_opts, got %s", opts)
+	}
+}
+
+func TestParseGeneralSubscription_ClashStandaloneShadowTLS(t *testing.T) {
+	data := []byte(`
+proxies:
+  - name: "stls-node"
+    type: shadowtls
+    server: 1.2.3.4
+    port: 8443
+    password: stls-password
+    sni: gateway.icloud.com
+    version: 3
+`)
+
+	nodes, err := ParseGeneralSubscription(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(nodes) != 1 {
+		t.Fatalf("expected 1 node, got %d", len(nodes))
+	}
+
+	obj := parseNodeRaw(t, nodes[0].RawOptions)
+	if obj["type"] != "shadowtls" {
+		t.Fatalf("expected type shadowtls, got %v", obj["type"])
+	}
+	if obj["password"] != "stls-password" {
+		t.Fatalf("expected password stls-password, got %v", obj["password"])
+	}
+	tls := mustMapField(t, obj, "tls")
+	if tls["server_name"] != "gateway.icloud.com" {
+		t.Fatalf("expected server_name gateway.icloud.com, got %v", tls["server_name"])
+	}
+}
+
+func TestParseGeneralSubscription_SSURIWithShadowTLS(t *testing.T) {
+	uri := "ss://MjAyMi1ibGFrZTMtYWVzLTI1Ni1nY206WWpaaU5EaGpNRGd5TVdZeE9UVTNNREEyTVRNMllqa3pZVGcwTnpGbE1HWT06TXpoaE9XVmhaRGt0T0RjeE5TMDBNMkkxTFRoa1ptTXROVGRtTURGbU1qUT0@tqt-ss.ftnode369.com:29907?plugin=shadow-tls%3Bhost%3Dgateway.icloud.com%3Bpassword%3Dtest-shadowtls-password%3Bversion%3D3#%F0%9F%87%B8%F0%9F%87%AC%20SG%2007"
+	nodes, err := ParseGeneralSubscription([]byte(uri))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(nodes) != 1 {
+		t.Fatalf("expected 1 node, got %d", len(nodes))
+	}
+	if nodes[0].Tag != "🇸🇬 SG 07" {
+		t.Fatalf("expected tag 🇸🇬 SG 07, got %s", nodes[0].Tag)
+	}
+
+	obj := parseNodeRaw(t, nodes[0].RawOptions)
+	if obj["type"] != "shadowsocks" {
+		t.Fatalf("expected type shadowsocks, got %v", obj["type"])
+	}
+	if obj["plugin"] != "shadow-tls" {
+		t.Fatalf("expected plugin shadow-tls, got %v", obj["plugin"])
+	}
+	opts, _ := obj["plugin_opts"].(string)
+	if !strings.Contains(opts, "host=gateway.icloud.com") {
+		t.Fatalf("expected host=gateway.icloud.com in plugin_opts, got %s", opts)
+	}
+	if !strings.Contains(opts, "password=test-shadowtls-password") {
+		t.Fatalf("expected password=test-shadowtls-password in plugin_opts, got %s", opts)
+	}
+}

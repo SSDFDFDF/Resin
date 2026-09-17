@@ -4,12 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net"
+	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/Resinat/Resin/internal/testutil"
 	"github.com/sagernet/sing-box/adapter"
@@ -210,6 +213,287 @@ func TestSingboxBuilder_InvalidJSON(t *testing.T) {
 	_, err = b.Build(raw)
 	if err == nil {
 		t.Fatal("expected error for invalid JSON, got nil")
+	}
+}
+
+func TestSingboxBuilder_ShadowTLSDetour_BuildAndClose(t *testing.T) {
+	b, err := NewSingboxBuilder()
+	if err != nil {
+		t.Fatalf("NewSingboxBuilder() error: %v", err)
+	}
+	defer b.Close()
+
+	raw := json.RawMessage(`{
+		"type": "shadowsocks",
+		"tag": "test-ss-stls",
+		"server": "127.0.0.1",
+		"server_port": 29907,
+		"method": "2022-blake3-aes-256-gcm",
+		"password": "YjZiNDhjMDg2MWYxOTU3MDA2MTM2YjkzYTg0NzFlMGY=:MzhhOWVhZGt0ODcxNS00M2I1LThkZmMtNTdmMDFmMjQ=",
+		"plugin": "shadow-tls",
+		"plugin_opts": "host=gateway.icloud.com;password=test-secret;version=3"
+	}`)
+
+	ob, err := b.Build(raw)
+	if err != nil {
+		t.Fatalf("Build(shadowsocks with shadow-tls) error: %v", err)
+	}
+	if ob == nil {
+		t.Fatal("expected non-nil outbound")
+	}
+	if ob.Type() != "shadowsocks" {
+		t.Fatalf("expected outbound type shadowsocks, got %s", ob.Type())
+	}
+	if ob.Tag() != "test-ss-stls" {
+		t.Fatalf("expected outbound tag test-ss-stls, got %s", ob.Tag())
+	}
+
+	chained, ok := ob.(*chainedOutbound)
+	if !ok {
+		t.Fatal("expected *chainedOutbound")
+	}
+	if chained.detourTag == "" {
+		t.Fatal("expected non-empty detourTag")
+	}
+
+	// Verify detour outbound exists in outboundMgr
+	if _, found := b.outboundMgr.Outbound(chained.detourTag); !found {
+		t.Fatalf("expected detour outbound %s in outboundMgr", chained.detourTag)
+	}
+
+	// Close outbound and verify detour is cleaned up
+	if err := chained.Close(); err != nil {
+		t.Fatalf("chained.Close() error: %v", err)
+	}
+
+	if _, found := b.outboundMgr.Outbound(chained.detourTag); found {
+		t.Fatalf("expected detour outbound %s to be removed from outboundMgr after Close", chained.detourTag)
+	}
+}
+
+func TestSingboxBuilder_ShadowTLSDetour_Dial(t *testing.T) {
+	var connCount atomic.Int32
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			connCount.Add(1)
+			_ = conn.Close()
+		}
+	}()
+
+	tcpAddr := ln.Addr().(*net.TCPAddr)
+
+	b, err := NewSingboxBuilder()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer b.Close()
+
+	raw := json.RawMessage(fmt.Sprintf(`{
+		"type": "shadowsocks",
+		"tag": "test-dial-stls",
+		"server": "127.0.0.1",
+		"server_port": %d,
+		"method": "2022-blake3-aes-256-gcm",
+		"password": "YjZiNDhjMDg2MWYxOTU3MDA2MTM2YjkzYTg0NzFlMGY=:MzhhOWVhZGt0ODcxNS00M2I1LThkZmMtNTdmMDFmMjQ=",
+		"plugin": "shadow-tls",
+		"plugin_opts": "host=gateway.icloud.com;password=test-secret;version=3"
+	}`, tcpAddr.Port))
+
+	ob, err := b.Build(raw)
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+	defer func() {
+		if closer, ok := ob.(io.Closer); ok {
+			_ = closer.Close()
+		}
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	dest := M.ParseSocksaddr("1.1.1.1:80")
+	_, _ = ob.DialContext(ctx, "tcp", dest)
+
+	if connCount.Load() == 0 {
+		t.Fatalf("expected outbound DialContext to connect to mock server via detour")
+	}
+}
+
+func TestSingboxBuilder_ShadowTLSDetour_MissingPassword(t *testing.T) {
+	b, err := NewSingboxBuilder()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer b.Close()
+
+	raw := json.RawMessage(`{
+		"type": "shadowsocks",
+		"tag": "test-missing-pass",
+		"server": "127.0.0.1",
+		"server_port": 8388,
+		"method": "2022-blake3-aes-256-gcm",
+		"password": "pass",
+		"plugin": "shadow-tls",
+		"plugin_opts": "host=example.com"
+	}`)
+
+	_, err = b.Build(raw)
+	if err == nil {
+		t.Fatal("expected error when shadow-tls options lack password, got nil")
+	}
+	if !strings.Contains(err.Error(), "missing password") {
+		t.Fatalf("unexpected error message: %v", err)
+	}
+}
+
+func TestSingboxBuilder_ShadowTLSDetour_MissingHost(t *testing.T) {
+	b, err := NewSingboxBuilder()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer b.Close()
+
+	raw := json.RawMessage(`{
+		"type": "shadowsocks",
+		"tag": "test-missing-host",
+		"server": "127.0.0.1",
+		"server_port": 8388,
+		"method": "2022-blake3-aes-256-gcm",
+		"password": "pass",
+		"plugin": "shadow-tls",
+		"plugin_opts": "password=test-secret"
+	}`)
+
+	_, err = b.Build(raw)
+	if err == nil {
+		t.Fatal("expected error when shadow-tls options lack host, got nil")
+	}
+	if !strings.Contains(err.Error(), "missing host") {
+		t.Fatalf("unexpected error message: %v", err)
+	}
+}
+
+// A failed shadowsocks build must not leave its detour registered: the detour
+// is created in the outbound manager before the outer outbound.
+func TestSingboxBuilder_ShadowTLSDetour_FailedBuildReleasesDetour(t *testing.T) {
+	b, err := NewSingboxBuilder()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer b.Close()
+
+	raw := json.RawMessage(`{
+		"type": "shadowsocks",
+		"tag": "test-bad-method",
+		"server": "127.0.0.1",
+		"server_port": 8388,
+		"method": "not-a-real-method",
+		"password": "pass",
+		"plugin": "shadow-tls",
+		"plugin_opts": "host=example.com;password=test-secret"
+	}`)
+
+	if _, err := b.Build(raw); err == nil {
+		t.Fatal("expected error for unknown shadowsocks method, got nil")
+	}
+	if n := len(b.outboundMgr.Outbounds()); n != 0 {
+		t.Fatalf("expected no detour left registered after failed build, got %d", n)
+	}
+}
+
+// fakeOutboundManager is a minimal adapter.OutboundManager used to observe
+// detour registration and removal without a full sing-box service graph.
+// Embedded interface methods are intentionally left unimplemented.
+type fakeOutboundManager struct {
+	adapter.OutboundManager
+
+	mu         sync.Mutex
+	registered map[string]adapter.Outbound
+}
+
+func (m *fakeOutboundManager) Outbounds() []adapter.Outbound {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	outbounds := make([]adapter.Outbound, 0, len(m.registered))
+	for _, ob := range m.registered {
+		outbounds = append(outbounds, ob)
+	}
+	return outbounds
+}
+
+func (m *fakeOutboundManager) Outbound(tag string) (adapter.Outbound, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	ob, loaded := m.registered[tag]
+	return ob, loaded
+}
+
+func (m *fakeOutboundManager) Remove(tag string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, loaded := m.registered[tag]; !loaded {
+		return os.ErrInvalid
+	}
+	delete(m.registered, tag)
+	return nil
+}
+
+// countingCloser tracks how many times Close was called.
+type countingCloser struct {
+	trackCloser
+	closes atomic.Int32
+}
+
+func (c *countingCloser) Close() error {
+	c.closes.Add(1)
+	return c.trackCloser.Close()
+}
+
+// The sing-box outbound manager only unregisters on Remove while it is not
+// started, so chainedOutbound must close the detour itself and do it once.
+func TestChainedOutbound_Close_ClosesDetourOnce(t *testing.T) {
+	mgr := &fakeOutboundManager{registered: make(map[string]adapter.Outbound)}
+	outer := &countingCloser{}
+	detour := &countingCloser{}
+	chained := &chainedOutbound{
+		Outbound:  outer,
+		manager:   mgr,
+		detour:    detour,
+		detourTag: "__resin_stls_test_1",
+	}
+	mgr.registered[chained.detourTag] = detour
+
+	if err := chained.Close(); err != nil {
+		t.Fatalf("chainedOutbound.Close() error: %v", err)
+	}
+	if !outer.closed.Load() {
+		t.Fatal("expected shadowsocks outbound to be closed")
+	}
+	if !detour.closed.Load() {
+		t.Fatal("expected shadowtls detour to be closed")
+	}
+	if _, loaded := mgr.Outbound(chained.detourTag); loaded {
+		t.Fatal("expected detour to be unregistered from the outbound manager")
+	}
+
+	if err := chained.Close(); err != nil {
+		t.Fatalf("second chainedOutbound.Close() error: %v", err)
+	}
+	if got := outer.closes.Load(); got != 1 {
+		t.Fatalf("expected outer outbound to be closed once, got %d", got)
+	}
+	if got := detour.closes.Load(); got != 1 {
+		t.Fatalf("expected detour outbound to be closed once, got %d", got)
 	}
 }
 

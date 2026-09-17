@@ -100,3 +100,76 @@ func TestEndToEnd_NodeEnterRoutableView(t *testing.T) {
 		t.Fatal("node should NOT be in routable view after outbound removed")
 	}
 }
+
+func TestEndToEnd_ShadowTLSNodeBuildLifecycle(t *testing.T) {
+	subMgr := topology.NewSubscriptionManager()
+	pool := topology.NewGlobalNodePool(topology.PoolConfig{
+		SubLookup:              subMgr.Lookup,
+		MaxLatencyTableEntries: 10,
+		MaxConsecutiveFailures: func() int { return 3 },
+		LatencyDecayWindow:     func() time.Duration { return 10 * time.Minute },
+	})
+
+	builder, err := outbound.NewSingboxBuilder()
+	if err != nil {
+		t.Fatalf("NewSingboxBuilder() error: %v", err)
+	}
+	defer builder.Close()
+
+	obMgr := outbound.NewOutboundManager(pool, builder)
+
+	yamlData := []byte(`
+proxies:
+  - name: "🇸🇬 SG 07"
+    type: ss
+    server: tqt-ss.ftnode369.com
+    port: 29907
+    cipher: 2022-blake3-aes-256-gcm
+    password: YjZiNDhjMDg2MWYxOTU3MDA2MTM2YjkzYTg0NzFlMGY=:MzhhOWVhZGt0ODcxNS00M2I1LThkZmMtNTdmMDFmMjQ=
+    plugin: shadow-tls
+    plugin-opts:
+      host: gateway.icloud.com
+      password: test-shadowtls-password
+      version: 3
+`)
+
+	nodes, err := subscription.ParseGeneralSubscription(yamlData)
+	if err != nil {
+		t.Fatalf("ParseGeneralSubscription: %v", err)
+	}
+	if len(nodes) != 1 {
+		t.Fatalf("expected 1 node, got %d", len(nodes))
+	}
+
+	hash := node.HashFromRawOptions(nodes[0].RawOptions)
+	pool.AddNodeFromSub(hash, nodes[0].RawOptions, "sub-1")
+
+	entry, ok := pool.GetEntry(hash)
+	if !ok {
+		t.Fatal("expected node in pool")
+	}
+
+	obMgr.EnsureNodeOutbound(hash)
+
+	if !entry.HasOutbound() {
+		t.Fatalf("expected outbound to be created, last error: %s", entry.GetLastError())
+	}
+	if entry.GetLastError() != "" {
+		t.Fatalf("unexpected last error: %s", entry.GetLastError())
+	}
+
+	obPtr := entry.Outbound.Load()
+	if obPtr == nil || *obPtr == nil {
+		t.Fatal("expected non-nil outbound")
+	}
+	ob := *obPtr
+	if ob.Type() != "shadowsocks" {
+		t.Fatalf("expected type shadowsocks, got %s", ob.Type())
+	}
+
+	// Remove and verify clean cleanup
+	obMgr.RemoveNodeOutbound(entry)
+	if entry.HasOutbound() {
+		t.Fatal("expected outbound to be nil after remove")
+	}
+}

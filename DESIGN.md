@@ -240,7 +240,7 @@ No available proxy nodes
         * 逻辑：遍历 `SubscriptionIDs`，找到这些订阅及其 View 中的 Tags。遍历的时候加读锁。
         * 只有当节点在**任意一个** Enabled 订阅下的**任意一个** Tag 满足**所有**正则表达式时，返回 true。Tag 匹配时使用 `<订阅名>/<Tag>` 的格式。
 
-本项目不使用原生的 sing-box OutboundManager，而是实现上述高性能 Outbound Manager。
+本项目不使用原生的 sing-box OutboundManager 负责业务调度，而是实现上述高性能 Outbound Manager（sing-box 原生的 OutboundManager 实例仅在内部作为 Detour 与 DNS 路由解析注册表使用，不参与节点生命周期调度）。
 
 #### Platform 可路由视图
 * 结构：`Custom Set：64 分片 * (RWMutex + Slice + Map)`

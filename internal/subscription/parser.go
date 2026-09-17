@@ -1613,6 +1613,48 @@ func convertClashProxyToNode(proxy map[string]any) (ParsedNode, bool) {
 		}
 		applyClashDialFields(outbound, proxy)
 		return buildParsedNode(outbound)
+	case "shadowtls":
+		password := strings.TrimSpace(getString(proxy, "password"))
+		if password == "" {
+			return ParsedNode{}, false
+		}
+		serverName := firstNonEmpty(
+			getString(proxy, "sni"),
+			getString(proxy, "servername"),
+			getString(proxy, "host"),
+			getString(proxy, "peer"),
+		)
+		tls := map[string]any{
+			"enabled":     true,
+			"server_name": firstNonEmpty(strings.TrimSpace(serverName), server),
+		}
+		if insecure, ok := getBool(proxy, "skip-cert-verify", "allowInsecure", "insecure"); ok && insecure {
+			tls["insecure"] = true
+		}
+		applyUTLSFromValue(tls, firstNonEmpty(
+			getString(proxy, "fingerprint"),
+			getString(proxy, "client-fingerprint"),
+			getString(proxy, "client_fingerprint"),
+			getString(proxy, "fp"),
+		))
+		version := 3
+		if v, ok := getUint(proxy, "version", "ver"); ok && v > 0 {
+			if v > 3 {
+				v = 3
+			}
+			version = int(v)
+		}
+		outbound := map[string]any{
+			"type":        "shadowtls",
+			"tag":         defaultTag(tag, "shadowtls", server, port),
+			"server":      server,
+			"server_port": port,
+			"version":     version,
+			"password":    password,
+			"tls":         tls,
+		}
+		applyClashDialFields(outbound, proxy)
+		return buildParsedNode(outbound)
 	default:
 		return ParsedNode{}, false
 	}
@@ -3668,6 +3710,9 @@ func splitSSPluginSpec(spec string) (plugin string, pluginOpts string) {
 	if plugin == "" {
 		return "", ""
 	}
+	if strings.EqualFold(plugin, "shadow-tls") || strings.EqualFold(plugin, "shadowtls") {
+		plugin = "shadow-tls"
+	}
 	if len(parts) == 1 {
 		return plugin, ""
 	}
@@ -3925,10 +3970,54 @@ func setSSPluginFromClash(outbound map[string]any, proxy map[string]any) {
 	if plugin == "" {
 		return
 	}
+
+	if strings.EqualFold(plugin, "shadow-tls") || strings.EqualFold(plugin, "shadowtls") {
+		plugin = "shadow-tls"
+		var extraOpts []string
+		if !pluginOptionHasKey(pluginOpts, "password", "token", "secret", "auth") {
+			if stlsPass := strings.TrimSpace(firstNonEmpty(
+				getString(proxy, "shadow-tls-password", "shadowtls-password", "shadow-tls-token", "shadowtls-token", "shadow-tls-secret", "shadowtls-secret"),
+			)); stlsPass != "" {
+				extraOpts = append(extraOpts, "password="+stlsPass)
+			}
+		}
+		if !pluginOptionHasKey(pluginOpts, "host", "sni", "server_name", "servername", "peer") {
+			if stlsHost := strings.TrimSpace(firstNonEmpty(
+				getString(proxy, "shadow-tls-sni", "shadowtls-sni", "shadow-tls-host", "shadowtls-host", "sni"),
+			)); stlsHost != "" {
+				extraOpts = append(extraOpts, "host="+stlsHost)
+			}
+		}
+		if len(extraOpts) > 0 {
+			if pluginOpts != "" {
+				pluginOpts += ";" + strings.Join(extraOpts, ";")
+			} else {
+				pluginOpts = strings.Join(extraOpts, ";")
+			}
+		}
+	}
+
 	outbound["plugin"] = plugin
 	if pluginOpts != "" {
 		outbound["plugin_opts"] = pluginOpts
 	}
+}
+
+func pluginOptionHasKey(pluginOpts string, keys ...string) bool {
+	for _, part := range strings.Split(pluginOpts, ";") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		k, _, _ := strings.Cut(part, "=")
+		k = strings.ToLower(strings.TrimSpace(k))
+		for _, key := range keys {
+			if k == strings.ToLower(key) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func buildPluginOptionsString(opts map[string]any) string {
